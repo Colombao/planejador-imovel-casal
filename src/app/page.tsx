@@ -13,7 +13,6 @@ import {
   RotateCcw,
   Sun,
   Moon,
-  AlertTriangle,
   Sparkles,
   Check,
   Building2,
@@ -25,6 +24,8 @@ import {
   Award,
   PlusCircle,
   Trash2,
+  Coins,
+  Layers,
 } from "lucide-react";
 import {
   JARAGUA_PROPERTIES,
@@ -38,12 +39,13 @@ import {
   buildAssetRanking,
   getIrRateForMonths,
 } from "@/services/marketApi";
+import { TOP_FIIS_2026 } from "@/data/fiisCatalog";
 
 interface ChecklistItem {
   id: string;
   title: string;
   desc: string;
-  category: "Carteira" | "Casal" | "Jaraguá do Sul";
+  category: "Carteira" | "Casal" | "Jaraguá do Sul" | "FIIs";
 }
 
 const CHECKLIST_ITEMS: ChecklistItem[] = [
@@ -73,27 +75,27 @@ const CHECKLIST_ITEMS: ChecklistItem[] = [
   },
   {
     id: "chk-5",
+    category: "FIIs",
+    title: "Montar a Carteira Bola de Neve na Caixa 3 (Papel Base 10 + Tijolo)",
+    desc: "Combinar MXRF11 + KNSC11 (Papel Base 10) com BTLG11 + XPML11 (Tijolo) usando metade da Caixa 3 e reinvestindo 100% dos dividendos.",
+  },
+  {
+    id: "chk-6",
     category: "Jaraguá do Sul",
     title: "Selecionar e visitar 2 a 3 opções em Jaraguá do Sul (Aba 1)",
     desc: "Comparar empreendimentos em Água Verde/Rau, Jaraguá Esquerdo, Vila Lenzi ou Três Rios do Norte e cadastrar as propostas reais na Aba 1.",
   },
   {
-    id: "chk-6",
+    id: "chk-7",
     category: "Jaraguá do Sul",
     title: "Checar 36 meses de vínculo CLT (Desconto Cotista FGTS na Caixa)",
     desc: "Mesmo com saldo zero de FGTS, 3 anos de carteira assinada somados reduzem em 0,5% a.a. os juros do financiamento na Caixa.",
   },
   {
-    id: "chk-7",
+    id: "chk-8",
     category: "Jaraguá do Sul",
     title: "Exigir Crédito Associativo + Patrimônio de Afetação na construtora",
     desc: "Para imóveis na planta até R$ 400 mil em Jaraguá do Sul, exigir assinatura via Crédito Associativo (congela os 80% contra o INCC).",
-  },
-  {
-    id: "chk-8",
-    category: "Carteira",
-    title: "Manter os 25% da Caixa 3 (Tesouro IPCA+ 2032 + ETF Global/FIIs)",
-    desc: "Garantir que no dia da entrega das chaves em Jaraguá do Sul vocês continuem com a Reserva Blindada + Carteira de Longo Prazo.",
   },
 ];
 
@@ -105,11 +107,20 @@ function fmtBRL(value: number): string {
   });
 }
 
+function fmtBRLCents(value: number): string {
+  return value.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 export default function PlanejadorCasalPage() {
   const [darkMode, setDarkMode] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<
-    "jaragua" | "mercado" | "simulador" | "planta" | "plano"
-  >("jaragua");
+    "jaragua" | "mercado" | "fiis" | "simulador" | "planta" | "plano"
+  >("fiis");
 
   // Market Live State
   const [market, setMarket] = useState<MarketIndicators>(DEFAULT_MARKET_INDICATORS);
@@ -145,6 +156,10 @@ export default function PlanejadorCasalPage() {
   const [months, setMonths] = useState<number>(30);
   const [splitImovelPct, setSplitImovelPct] = useState<number>(75);
 
+  // FII Snowball simulator state
+  const [selectedFiiTicker, setSelectedFiiTicker] = useState<string>("MXRF11");
+  const [fiiShareOfBox3Pct, setFiiShareOfBox3Pct] = useState<number>(50);
+
   // Off-plan stress test parameters
   const [inccAnnual, setInccAnnual] = useState<number>(5.48);
   const [reformaCost, setReformaCost] = useState<number>(28000);
@@ -170,7 +185,6 @@ export default function PlanejadorCasalPage() {
     [allProperties, selectedPropId]
   );
 
-  // Fetch live Central Bank indicators
   const syncMarketData = async () => {
     setLoadingMarket(true);
     try {
@@ -184,7 +198,6 @@ export default function PlanejadorCasalPage() {
     }
   };
 
-  // Load saved state + fetch live BCB market indicators on mount
   useEffect(() => {
     syncMarketData();
 
@@ -243,7 +256,6 @@ export default function PlanejadorCasalPage() {
     }
   }, []);
 
-  // Persist simulation state
   useEffect(() => {
     try {
       localStorage.setItem(
@@ -396,13 +408,12 @@ export default function PlanejadorCasalPage() {
     }
   };
 
-  // Asset Ranking based on live market rates
   const assetRanking = useMemo(
     () => buildAssetRanking(market, months, lciRate),
     [market, months, lciRate]
   );
 
-  // Core Financial Calculations driven by Live Market Rates & Selected Jaraguá Property
+  // Core Financial Calculations
   const sim = useMemo(() => {
     const ir = getIrRateForMonths(months);
     const safeRes = Math.min(userRes, Math.max(0, userInit - 5000));
@@ -418,13 +429,11 @@ export default function PlanejadorCasalPage() {
     const c2Monthly = coupleMonthly * splitRatio;
     const c3Monthly = coupleMonthly * (1 - splitRatio);
 
-    // Dynamic Net Rates from Market Indicators
-    const c1NetAnnual = (market.cdi * (1 - ir)) / 100; // 100% CDI net
-    // Box 2 mixes 120% CDI initial + LCI/LCA tax-free monthly contributions
+    const c1NetAnnual = (market.cdi * (1 - ir)) / 100;
     const lciNetAnnual = (market.cdi * (lciRate / 100)) / 100;
     const cdb120NetAnnual = (market.cdi * 1.2 * (1 - ir)) / 100;
     const c2NetAnnual = lciNetAnnual * 0.8 + cdb120NetAnnual * 0.2;
-    // Box 3 mixes Tesouro IPCA+ 2032 + Global ETF/FIIs
+
     const ipcaDec = market.ipca12m / 100;
     const tesouroIpcaGross = (1 + ipcaDec) * (1 + market.tesouroIpcaReal / 100) - 1;
     const c3NetAnnual = tesouroIpcaGross * (1 - 0.15);
@@ -453,7 +462,7 @@ export default function PlanejadorCasalPage() {
     }
 
     const downPayment20 = propPrice * 0.2;
-    const docsItbi5 = propPrice * 0.05; // ITBI Jaraguá do Sul (2%) + Escritura/Registro/Vistoria (~2.5-3%)
+    const docsItbi5 = propPrice * 0.05;
     const targetPronto = downPayment20 + docsItbi5;
     const targetPlanta = targetPronto + reformaCost;
 
@@ -461,14 +470,12 @@ export default function PlanejadorCasalPage() {
     const leftoverPronto = totalFinal - targetPronto;
     const c2InterestEarned = cur2 - (c2Init + c2Monthly * months);
 
-    // Proportional Ownership (Caixa 2 + Caixa 3)
     const userCommitted = userExRes + userMonthly * months;
     const partCommitted = partInit + partMonthly * months;
     const totalCommitted = Math.max(1, userCommitted + partCommitted);
     const userSharePct = (userCommitted / totalCommitted) * 100;
     const partSharePct = (partCommitted / totalCommitted) * 100;
 
-    // Off-plan (Na Planta) specific math for Jaraguá do Sul
     const signalAmount = (propPrice * signalPct) / 100;
     const restEntryPct = Math.max(0, 20 - signalPct);
     const builderEntryRest = (propPrice * restEntryPct) / 100;
@@ -480,7 +487,6 @@ export default function PlanejadorCasalPage() {
       financed80 * Math.pow(1 + inccAnnual / 100, months / 12);
     const inccDebtIncrease = inccCorrectedDebt80 - financed80;
 
-    // MCMV / Financing bracket analysis in Jaraguá do Sul (SC)
     const combinedIncome = userIncome + partIncome;
     let mcmvStatus = "";
     let estimatedRate = "";
@@ -560,6 +566,86 @@ export default function PlanejadorCasalPage() {
     market,
     lciRate,
   ]);
+
+  // FII Snowball Simulation (Exact Share Accumulation & Magic Number Tracker)
+  const fiiSnowball = useMemo(() => {
+    const fiiAsset =
+      TOP_FIIS_2026.find((f) => f.ticker === selectedFiiTicker) || TOP_FIIS_2026[0];
+    const fiiInitCapital = sim.c3Init * (fiiShareOfBox3Pct / 100);
+    const fiiMonthlyDeposit = sim.c3Monthly * (fiiShareOfBox3Pct / 100);
+
+    let shares = Math.floor(fiiInitCapital / fiiAsset.price);
+    let cashLeftover = fiiInitCapital - shares * fiiAsset.price;
+    let totalDividendsReinvested = 0;
+    let freeSharesFromDividends = 0;
+    let magicNumberReachedMonth: number | null =
+      shares >= fiiAsset.magicNumberShares ? 0 : null;
+
+    const history: {
+      month: number;
+      shares: number;
+      monthlyDividendIncome: number;
+      patrimony: number;
+      freeSharesTotal: number;
+    }[] = [];
+
+    for (let m = 1; m <= months; m++) {
+      const dividendReceived = shares * fiiAsset.monthlyDividend;
+      totalDividendsReinvested += dividendReceived;
+
+      const availableForNewShares = cashLeftover + fiiMonthlyDeposit + dividendReceived;
+      const newShares = Math.floor(availableForNewShares / fiiAsset.price);
+      const sharesFromDivThisMonth = Math.floor(
+        (dividendReceived + cashLeftover) / fiiAsset.price
+      );
+      if (sharesFromDivThisMonth > 0) {
+        freeSharesFromDividends += sharesFromDivThisMonth;
+      }
+
+      shares += newShares;
+      cashLeftover = availableForNewShares - newShares * fiiAsset.price;
+
+      if (magicNumberReachedMonth === null && shares >= fiiAsset.magicNumberShares) {
+        magicNumberReachedMonth = m;
+      }
+
+      history.push({
+        month: m,
+        shares,
+        monthlyDividendIncome: shares * fiiAsset.monthlyDividend,
+        patrimony: shares * fiiAsset.price + cashLeftover,
+        freeSharesTotal: freeSharesFromDividends,
+      });
+    }
+
+    const finalState = history[history.length - 1] || {
+      month: 0,
+      shares,
+      monthlyDividendIncome: shares * fiiAsset.monthlyDividend,
+      patrimony: shares * fiiAsset.price + cashLeftover,
+      freeSharesTotal: 0,
+    };
+
+    const estimatedCondoFeeJaragua = 380; // Condomínio médio em Jaraguá do Sul (MCMV clube)
+    const condoCoveragePct = Math.min(
+      100,
+      (finalState.monthlyDividendIncome / estimatedCondoFeeJaragua) * 100
+    );
+
+    return {
+      fiiAsset,
+      fiiInitCapital,
+      fiiMonthlyDeposit,
+      finalShares: finalState.shares,
+      finalMonthlyDividend: finalState.monthlyDividendIncome,
+      finalPatrimony: finalState.patrimony,
+      totalDividendsReinvested,
+      freeSharesFromDividends,
+      magicNumberReachedMonth,
+      condoCoveragePct,
+      history,
+    };
+  }, [selectedFiiTicker, fiiShareOfBox3Pct, sim.c3Init, sim.c3Monthly, months]);
 
   const completedChecks = Object.values(checkedIds).filter(Boolean).length;
 
@@ -668,15 +754,9 @@ export default function PlanejadorCasalPage() {
                 </span>
               </span>
               <span>
-                <strong className="text-slate-700 dark:text-slate-300">Tesouro IPCA+ 2032:</strong>{" "}
+                <strong className="text-slate-700 dark:text-slate-300">MXRF11 / KNSC11:</strong>{" "}
                 <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                  IPCA + {market.tesouroIpcaReal.toFixed(2).replace(".", ",")}%
-                </span>
-              </span>
-              <span>
-                <strong className="text-slate-700 dark:text-slate-300">Dólar:</strong>{" "}
-                <span className="font-semibold">
-                  R$ {market.usdBrl.toFixed(2).replace(".", ",")}
+                  ~13,7% a.a. (Isento)
                 </span>
               </span>
             </div>
@@ -700,7 +780,7 @@ export default function PlanejadorCasalPage() {
                 Parâmetros do Casal & Imóvel Selecionado em Jaraguá do Sul
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Selecione um empreendimento na Aba 1 ou ajuste livremente os controles abaixo.
+                Ajuste os controles abaixo: todas as abas (Imóveis de Jaraguá, Ranking Renda Fixa e Bola de Neve de FIIs) atualizam na hora.
               </p>
             </div>
             <div className="flex items-center gap-2 text-xs">
@@ -938,7 +1018,7 @@ export default function PlanejadorCasalPage() {
                 <div className="flex justify-between text-xs mb-1">
                   <span className="text-slate-500 dark:text-slate-400">Divisão do Aporte Mensal:</span>
                   <span className="font-bold text-slate-900 dark:text-white">
-                    {splitImovelPct}% Imóvel / {100 - splitImovelPct}% Cresc.
+                    {splitImovelPct}% Imóvel / {100 - splitImovelPct}% Caixa 3
                   </span>
                 </div>
                 <input
@@ -969,27 +1049,32 @@ export default function PlanejadorCasalPage() {
           {[
             {
               id: "jaragua",
-              label: "1. Imóveis na Planta: Jaraguá do Sul (SC)",
+              label: "1. Imóveis: Jaraguá do Sul",
               icon: MapPin,
             },
             {
               id: "mercado",
-              label: "2. Ranking do Mercado: O Que Mais Compensa",
+              label: "2. Ranking Renda Fixa (BCB)",
               icon: Award,
             },
             {
+              id: "fiis",
+              label: "3. Bola de Neve FIIs (MXRF11 & Top 6)",
+              icon: Coins,
+            },
+            {
               id: "simulador",
-              label: "3. Simulador das 3 Caixas & Casal",
+              label: "4. Simulador das 3 Caixas & Casal",
               icon: TrendingUp,
             },
             {
               id: "planta",
-              label: "4. Raio-X: Pronto vs. Na Planta (INCC)",
+              label: "5. Pronto vs. Na Planta (INCC)",
               icon: Building2,
             },
             {
               id: "plano",
-              label: `5. Rotina & Checklist (${completedChecks}/${CHECKLIST_ITEMS.length})`,
+              label: `6. Checklist (${completedChecks}/${CHECKLIST_ITEMS.length})`,
               icon: CheckSquare,
             },
           ].map((tab) => {
@@ -999,7 +1084,7 @@ export default function PlanejadorCasalPage() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition shadow-sm ${
+                className={`inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition shadow-sm ${
                   isActive
                     ? "bg-blue-600 text-white"
                     : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -1015,7 +1100,6 @@ export default function PlanejadorCasalPage() {
         {/* ==================== TAB 1: IMÓVEIS NA PLANTA EM JARAGUÁ DO SUL - SC ==================== */}
         {activeTab === "jaragua" && (
           <div className="space-y-6">
-            {/* Header & Custom Add Button */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
@@ -1026,7 +1110,7 @@ export default function PlanejadorCasalPage() {
                     Cotações Reais de Empreendimentos na Planta e Bairros de Jaraguá do Sul
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Clique em <strong>&ldquo;Cotar Este Imóvel&rdquo;</strong> em qualquer opção abaixo para carregar o valor, prazo de obra, sinal e reserva de piso/marcenaria diretamente na simulação do casal.
+                    Clique em <strong>&ldquo;Cotar e Simular Este Imóvel&rdquo;</strong> para carregar o preço, prazo de obra, sinal e reserva de piso/marcenaria diretamente no plano do casal.
                   </p>
                 </div>
                 <button
@@ -1038,7 +1122,6 @@ export default function PlanejadorCasalPage() {
                 </button>
               </div>
 
-              {/* Form to add a custom visited property in Jaraguá do Sul */}
               {showAddForm && (
                 <form
                   onSubmit={handleAddCustomProperty}
@@ -1090,7 +1173,6 @@ export default function PlanejadorCasalPage() {
                         value={newPropArea}
                         onChange={(e) => setNewPropArea(Number(e.target.value))}
                         className="w-1/2 p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-medium"
-                        title="Área privativa em m²"
                       />
                       <input
                         type="number"
@@ -1100,7 +1182,6 @@ export default function PlanejadorCasalPage() {
                         value={newPropMonths}
                         onChange={(e) => setNewPropMonths(Number(e.target.value))}
                         className="w-1/2 p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-medium"
-                        title="Meses até a entrega das chaves"
                       />
                     </div>
                   </div>
@@ -1116,7 +1197,6 @@ export default function PlanejadorCasalPage() {
               )}
             </div>
 
-            {/* Cards of Developments in Jaraguá do Sul */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {allProperties.map((prop) => {
                 const isSelected = prop.id === selectedPropId;
@@ -1254,7 +1334,6 @@ export default function PlanejadorCasalPage() {
               })}
             </div>
 
-            {/* Neighborhood Price/m² Table for Jaraguá do Sul */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
               <h3 className="text-base font-bold text-slate-900 dark:text-white">
                 🗺️ Raio-X do Metro Quadrado (m²) por Bairro em Jaraguá do Sul - SC
@@ -1314,7 +1393,6 @@ export default function PlanejadorCasalPage() {
         {/* ==================== TAB 2: RANKING DO MERCADO FINANCEIRO ==================== */}
         {activeTab === "mercado" && (
           <div className="space-y-6">
-            {/* Market Scenario Stress-Test Controls */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
                 <div>
@@ -1322,14 +1400,13 @@ export default function PlanejadorCasalPage() {
                     Radar de Renda Fixa & Juro Real • Atualizado ({market.lastUpdated})
                   </span>
                   <h3 className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">
-                    O Que Está Compensando Mais Investir Hoje para o Prazo de {months} Meses?
+                    O Que Está Compensando Mais na Renda Fixa para {months} Meses?
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Ranking calculado já descontando a alíquota exata de Imposto de Renda ({(getIrRateForMonths(months) * 100).toFixed(1).replace(".0", "")}% para {months} meses) e descontando a inflação (IPCA de {market.ipca12m.toFixed(2).replace(".", ",")}% a.a.).
+                    Ranking líquido já descontando o Imposto de Renda ({(getIrRateForMonths(months) * 100).toFixed(1).replace(".0", "")}% para {months} meses) e a inflação IPCA ({market.ipca12m.toFixed(2).replace(".", ",")}% a.a.).
                   </p>
                 </div>
 
-                {/* Custom Macroeconomic Sliders for Scenario Testing */}
                 <div className="flex flex-wrap gap-4">
                   <div className="w-48">
                     <div className="flex justify-between text-xs mb-1">
@@ -1372,7 +1449,6 @@ export default function PlanejadorCasalPage() {
                 </div>
               </div>
 
-              {/* Ranking Table */}
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
@@ -1453,7 +1529,6 @@ export default function PlanejadorCasalPage() {
               </div>
             </div>
 
-            {/* Interactive LCI/LCA vs CDB Converter */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <BookOpen className="w-4 h-4 text-blue-500" />
@@ -1513,7 +1588,248 @@ export default function PlanejadorCasalPage() {
           </div>
         )}
 
-        {/* ==================== TAB 3: SIMULADOR DAS 3 CAIXAS & CASAL ==================== */}
+        {/* ==================== TAB 3: BOLA DE NEVE FIIs (MXRF11 & TOP 6) ==================== */}
+        {activeTab === "fiis" && (
+          <div className="space-y-6">
+            {/* Snowball Interactive Simulator Banner */}
+            <div className="bg-white dark:bg-slate-900 border-2 border-purple-600 rounded-2xl p-5 shadow-sm space-y-5">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+                <div>
+                  <span className="text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                    Simulador Bola de Neve (Caixa 3 do Casal) • Isento de IR
+                  </span>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">
+                    Quantas Cotas e Quanto de Aluguel Mensal Vocês Terão ao Pegar as Chaves?
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Enquanto a Caixa 2 garante o apartamento em Jaraguá do Sul em Renda Fixa, a Caixa 3 acumula FIIs reinvestindo 100% dos dividendos todo mês:
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-4 items-center">
+                  <div className="w-52">
+                    <label className="block text-xs text-slate-500 mb-1">
+                      Escolha o FII para Simular:
+                    </label>
+                    <select
+                      value={selectedFiiTicker}
+                      onChange={(e) => setSelectedFiiTicker(e.target.value)}
+                      className="w-full p-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
+                    >
+                      {TOP_FIIS_2026.map((f) => (
+                        <option key={f.ticker} value={f.ticker}>
+                          {f.ticker} — {f.name} ({fmtBRLCents(f.price)})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="w-52">
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-slate-500">% da Caixa 3 em FIIs:</span>
+                      <span className="font-bold text-purple-600 dark:text-purple-400">
+                        {fiiShareOfBox3Pct}% ({fmtBRL(fiiSnowball.fiiMonthlyDeposit)}/mês)
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={25}
+                      max={100}
+                      step={5}
+                      value={fiiShareOfBox3Pct}
+                      onChange={(e) => setFiiShareOfBox3Pct(Number(e.target.value))}
+                      className="w-full cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 4 Snowball Result Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                  <div className="text-xs text-slate-500 font-medium">
+                    Total de Cotas de {fiiSnowball.fiiAsset.ticker} em {months}m
+                  </div>
+                  <div className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">
+                    {fiiSnowball.finalShares} cotas
+                  </div>
+                  <div className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                    Patrimônio em {fiiSnowball.fiiAsset.ticker}:{" "}
+                    <strong>{fmtBRL(fiiSnowball.finalPatrimony)}</strong>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                  <div className="text-xs text-slate-500 font-medium">
+                    Mágica dos Juros: Cotas &ldquo;Grátis&rdquo;
+                  </div>
+                  <div className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">
+                    +{fiiSnowball.freeSharesFromDividends} cotas
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">
+                    Compradas sozinhas com{" "}
+                    <strong>{fmtBRL(fiiSnowball.totalDividendsReinvested)}</strong> de dividendos!
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                  <div className="text-xs text-slate-500 font-medium">
+                    🎯 Magic Number ({fiiSnowball.fiiAsset.magicNumberShares} cotas)
+                  </div>
+                  <div className="text-2xl font-extrabold text-blue-600 dark:text-blue-400 mt-1">
+                    {fiiSnowball.magicNumberReachedMonth === 0
+                      ? "No 1º Dia!"
+                      : fiiSnowball.magicNumberReachedMonth !== null
+                      ? `No Mês ${fiiSnowball.magicNumberReachedMonth}!`
+                      : `Faltam ${
+                          fiiSnowball.fiiAsset.magicNumberShares - fiiSnowball.finalShares
+                        } cotas`}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">
+                    Capital p/ 1 cota grátis/mês:{" "}
+                    <strong>{fmtBRL(fiiSnowball.fiiAsset.magicNumberCapital)}</strong>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-purple-600 text-white">
+                  <div className="text-xs opacity-90 font-medium">
+                    Aluguel Mensal Isento nas Chaves ({months}m)
+                  </div>
+                  <div className="text-2xl font-extrabold mt-1">
+                    {fmtBRLCents(fiiSnowball.finalMonthlyDividend)}/mês
+                  </div>
+                  <div className="text-xs opacity-90 mt-1">
+                    Já paga <strong>{fiiSnowball.condoCoveragePct.toFixed(0)}%</strong> do condomínio em Jaraguá do Sul!
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Curated Recommendation: Why Combine MXRF11 with KNSC11, BTLG11 & XPML11 */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-4">
+                <div>
+                  <span className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
+                    <Layers className="w-4 h-4" /> Seleção CNPI • Melhores FIIs para Acompanhar o MXRF11
+                  </span>
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white mt-0.5">
+                    Quais FIIs Estão Compensando Mais Hoje (P/VP Descontado + Qualidade Alta)?
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    O segredo para não depender só do <strong>MXRF11</strong> é montar o <strong>Quarteto Equilibrado (25% em cada)</strong>: 2 FIIs de Papel Base 10 (para bola de neve rápida) + 2 FIIs de Tijolo Descontados (para os imóveis subirem com a inflação):
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {TOP_FIIS_2026.map((fii) => {
+                  const isActive = fii.ticker === selectedFiiTicker;
+                  const discountPct = Math.round((1 - fii.pvp) * 100);
+
+                  return (
+                    <div
+                      key={fii.ticker}
+                      className={`p-5 rounded-2xl flex flex-col justify-between transition ${
+                        isActive
+                          ? "bg-purple-50/40 dark:bg-purple-950/20 border-2 border-purple-600"
+                          : "bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2 text-xs mb-2">
+                          <span
+                            className={`px-2.5 py-0.5 rounded-full font-bold ${
+                              fii.category === "Papel"
+                                ? "bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300"
+                                : "bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300"
+                            }`}
+                          >
+                            {fii.segment}
+                          </span>
+                          <span className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-bold">
+                            P/VP {fii.pvp.toFixed(2).replace(".", ",")}x (-{discountPct}%)
+                          </span>
+                        </div>
+
+                        <div className="flex items-baseline justify-between">
+                          <h4 className="text-lg font-extrabold text-slate-900 dark:text-white">
+                            {fii.ticker}
+                          </h4>
+                          <span className="text-xs font-semibold text-slate-500">
+                            {fii.manager}
+                          </span>
+                        </div>
+                        <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                          {fii.name}
+                        </p>
+
+                        <div className="mt-3 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-1.5 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Preço da Cota:</span>
+                            <span className="font-bold text-slate-900 dark:text-white">
+                              {fmtBRLCents(fii.price)}{" "}
+                              {fii.isBase10 && (
+                                <span className="text-blue-600 dark:text-blue-400">
+                                  (Base 10)
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Último Dividendo Mensal:</span>
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                              {fmtBRLCents(fii.monthlyDividend)} / cota (Isento)
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Dividend Yield (12m):</span>
+                            <span className="font-extrabold text-blue-600 dark:text-blue-400">
+                              {fii.dy12m.toFixed(2).replace(".", ",")}% a.a.
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Magic Number (1 cota/mês):</span>
+                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                              {fii.magicNumberShares} cotas ({fmtBRL(fii.magicNumberCapital)})
+                            </span>
+                          </div>
+                        </div>
+
+                        <ul className="mt-3 space-y-1 text-xs text-slate-600 dark:text-slate-300">
+                          {fii.pros.map((p, i) => (
+                            <li key={i} className="flex items-start gap-1.5">
+                              <span className="text-emerald-500 font-bold">✓</span>
+                              <span>{p}</span>
+                            </li>
+                          ))}
+                        </ul>
+
+                        <div className="mt-3 p-2.5 rounded-lg bg-slate-100 dark:bg-slate-900 text-xs text-slate-600 dark:text-slate-300">
+                          <strong>Veredito CNPI:</strong> {fii.cnpiVerdict}
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => setSelectedFiiTicker(fii.ticker)}
+                        className={`mt-4 w-full py-2 px-3 rounded-xl text-xs font-bold transition ${
+                          isActive
+                            ? "bg-purple-600 text-white"
+                            : "bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-purple-600 hover:text-white"
+                        }`}
+                      >
+                        {isActive
+                          ? `Simulando ${fii.ticker} na Bola de Neve Acima`
+                          : `Simular ${fii.ticker} na Bola de Neve`}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==================== TAB 4: SIMULADOR DAS 3 CAIXAS & CASAL ==================== */}
         {activeTab === "simulador" && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1593,17 +1909,17 @@ export default function PlanejadorCasalPage() {
                 <div>
                   <div className="flex items-center justify-between text-xs mb-2">
                     <span className="font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1">
-                      <TrendingUp className="w-4 h-4" /> Caixa 3 • Futuro
+                      <TrendingUp className="w-4 h-4" /> Caixa 3 • FIIs + IPCA+
                     </span>
                     <span className="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 font-medium">
-                      Multiplicação
+                      Bola de Neve
                     </span>
                   </div>
                   <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                    Crescimento de Patrimônio
+                    Crescimento & Renda Mensal
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Tesouro IPCA+ 2032 + ETF Global (WRLD11) / FIIs. Recebe{" "}
+                    50% Tesouro IPCA+ 2032 + 50% Carteira FIIs (MXRF11, KNSC11, BTLG11, XPML11). Recebe{" "}
                     <strong>{fmtBRL(sim.c3Monthly)}/mês</strong>.
                   </p>
                 </div>
@@ -1615,7 +1931,7 @@ export default function PlanejadorCasalPage() {
                     {fmtBRL(sim.cur3)}
                   </div>
                   <div className="text-xs text-purple-600 dark:text-purple-400 mt-0.5">
-                    Continua crescendo após pegar as chaves!
+                    Gera dividendos mensais isentos nas chaves!
                   </div>
                 </div>
               </div>
@@ -1814,7 +2130,6 @@ export default function PlanejadorCasalPage() {
                 </div>
               </div>
 
-              {/* Couple Proportional Ownership */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col justify-between space-y-4">
                 <div>
                   <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -1822,7 +2137,7 @@ export default function PlanejadorCasalPage() {
                     Divisão Proporcional no Contrato
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Participação justa calculada sobre o capital alocado nas Caixas 2 e 3 ao longo de {months} meses (preservando sua Reserva Blindada individual).
+                    Participação justa calculada sobre o capital alocado nas Caixas 2 e 3 ao longo de {months} meses.
                   </p>
 
                   <div className="mt-4 space-y-3">
@@ -1892,7 +2207,7 @@ export default function PlanejadorCasalPage() {
           </div>
         )}
 
-        {/* ==================== TAB 4: RAIO-X PRONTO VS. NA PLANTA ==================== */}
+        {/* ==================== TAB 5: RAIO-X PRONTO VS. NA PLANTA ==================== */}
         {activeTab === "planta" && (
           <div className="space-y-6">
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
@@ -1946,7 +2261,6 @@ export default function PlanejadorCasalPage() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-5">
-                {/* Estratégia A */}
                 <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex flex-col justify-between space-y-4">
                   <div>
                     <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">
@@ -1984,7 +2298,6 @@ export default function PlanejadorCasalPage() {
                   </div>
                 </div>
 
-                {/* Estratégia B */}
                 <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border-2 border-blue-600 flex flex-col justify-between space-y-4">
                   <div>
                     <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-600 text-white">
@@ -2022,7 +2335,6 @@ export default function PlanejadorCasalPage() {
                   </div>
                 </div>
 
-                {/* Estratégia C */}
                 <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex flex-col justify-between space-y-4">
                   <div>
                     <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-300">
@@ -2067,7 +2379,7 @@ export default function PlanejadorCasalPage() {
           </div>
         )}
 
-        {/* ==================== TAB 5: ROTINA MENSAL & CHECKLIST ==================== */}
+        {/* ==================== TAB 6: ROTINA MENSAL & CHECKLIST ==================== */}
         {activeTab === "plano" && (
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
             <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
@@ -2120,19 +2432,21 @@ export default function PlanejadorCasalPage() {
                     </div>
                   </div>
                   <span className="font-bold text-sm text-slate-900 dark:text-white">
-                    {fmtBRL(sim.c3Monthly / 2)}/mês
+                    {fmtBRL(sim.c3Monthly * (1 - fiiShareOfBox3Pct / 100))}/mês
                   </span>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <div className="p-3.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-500 flex items-center justify-between">
                   <div>
                     <div className="font-bold text-slate-900 dark:text-white">
-                      3B. Caixa 3 — ETF Global (WRLD11) ou FIIs
+                      3B. Caixa 3 — Carteira FIIs (MXRF11, KNSC11, BTLG11, XPML11)
                     </div>
-                    <div className="text-slate-500">Diversificação internacional / dividendos</div>
+                    <div className="text-slate-500">
+                      Bola de neve mensal isenta + reinvestimento de dividendos
+                    </div>
                   </div>
-                  <span className="font-bold text-sm text-slate-900 dark:text-white">
-                    {fmtBRL(sim.c3Monthly / 2)}/mês
+                  <span className="font-bold text-sm text-purple-600 dark:text-purple-400">
+                    {fmtBRL(sim.c3Monthly * (fiiShareOfBox3Pct / 100))}/mês
                   </span>
                 </div>
               </div>
