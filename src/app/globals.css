@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand-color: #2563eb;
+}
+
+.dark {
+  --brand-color: #3b82f6;
+}
+
+body {
+  color-scheme: light dark;
+  accent-color: var(--brand-color);
+}
+
+/* Fallback for older browsers without accent-color support (modern-web-guidance) */
+@supports not (accent-color: var(--brand-color)) {
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+  }
+
+  input[type="range"]::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 8px;
+    background: linear-gradient(to right, var(--brand-color, #2563eb) var(--progress, 50%), #cbd5e1 var(--progress, 50%));
+    border-radius: 4px;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 16px;
+    width: 16px;
+    border-radius: 50%;
+    background: var(--brand-color, #2563eb);
+    cursor: pointer;
+    margin-top: -4px;
+  }
+
+  input[type="range"]::-moz-range-track {
+    width: 100%;
+    height: 8px;
+    background: #cbd5e1;
+    border-radius: 4px;
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    height: 16px;
+    width: 16px;
+    border-radius: 50%;
+    background: var(--brand-color, #2563eb);
+    cursor: pointer;
+  }
+
+  input[type="range"]::-moz-range-progress {
+    background-color: var(--brand-color, #2563eb);
+    height: 8px;
+    border-radius: 4px;
+  }
+}
