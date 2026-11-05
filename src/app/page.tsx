@@ -20,13 +20,30 @@ import {
   Wallet,
   ArrowRight,
   Info,
+  MapPin,
+  RefreshCw,
+  Award,
+  PlusCircle,
+  Trash2,
 } from "lucide-react";
+import {
+  JARAGUA_PROPERTIES,
+  JARAGUA_NEIGHBORHOODS,
+  JaraguaProperty,
+} from "@/data/jaraguaProperties";
+import {
+  DEFAULT_MARKET_INDICATORS,
+  MarketIndicators,
+  fetchLiveMarketIndicators,
+  buildAssetRanking,
+  getIrRateForMonths,
+} from "@/services/marketApi";
 
 interface ChecklistItem {
   id: string;
   title: string;
   desc: string;
-  category: "Carteira" | "Casal" | "Imóvel";
+  category: "Carteira" | "Casal" | "Jaraguá do Sul";
 }
 
 const CHECKLIST_ITEMS: ChecklistItem[] = [
@@ -34,49 +51,49 @@ const CHECKLIST_ITEMS: ChecklistItem[] = [
     id: "chk-1",
     category: "Carteira",
     title: "Validar os R$ 10.000 em 120% do CDI",
-    desc: "Conferir no aplicativo do banco/corretora a data de vencimento e se possui cobertura do FGC, mantendo esse valor carimbado na Caixa 2 (Imóvel).",
+    desc: "Conferir no aplicativo do banco/corretora a data de vencimento e garantia do FGC, mantendo esse valor carimbado na Caixa 2 (Imóvel).",
   },
   {
     id: "chk-2",
     category: "Carteira",
-    title: "Separar mentalmente os R$ 50.000 atuais (sem pagar IR à toa)",
-    desc: "Manter R$ 30.000 como Reserva Blindada (Caixa 1), R$ 15.000 na Caixa 2 (Imóvel) e R$ 5.000 na Caixa 3 (Crescimento) sem resgatar antes de vencer.",
+    title: "Separar os R$ 50.000 atuais nas 3 Caixas (sem resgatar antes da hora)",
+    desc: "Manter R$ 30.000 como Reserva Blindada (Caixa 1), R$ 15.000 na Caixa 2 (Imóvel) e R$ 5.000 na Caixa 3 (Crescimento).",
   },
   {
     id: "chk-3",
     category: "Casal",
     title: "Alinhar o Aporte Mensal e a Proporção do Casal",
-    desc: "Simular juntos na Aba 1 quanto cada um pode aportar por mês sem sufocar o orçamento e salvar o link da simulação.",
+    desc: "Simular juntos quanto cada um pode aportar por mês e usar o botão Compartilhar para salvar o cenário no WhatsApp.",
   },
   {
     id: "chk-4",
     category: "Carteira",
-    title: "Selecionar LCI/LCA (90%+ do CDI) para os novos aportes da Caixa 2",
-    desc: "Todo mês, direcionar a fatia do imóvel para LCI ou LCA isenta de Imposto de Renda com vencimento casado com a data da compra (9 a 24 meses).",
+    title: "Direcionar os novos aportes da Caixa 2 para LCI/LCA (90%+ do CDI)",
+    desc: "Consultando a Aba 2 (Ranking do Mercado), aplicar a fatia mensal do imóvel em LCI/LCA isenta de IR com vencimento casado com a obra.",
   },
   {
     id: "chk-5",
-    category: "Imóvel",
-    title: "Checar 36 meses de vínculo CLT (Desconto Cotista FGTS)",
-    desc: "Mesmo tendo sacado todo o FGTS, verificar na Carteira de Trabalho Digital se um de vocês soma 3 anos de registro CLT para reduzir 0,5% a.a. nos juros da Caixa.",
+    category: "Jaraguá do Sul",
+    title: "Selecionar e visitar 2 a 3 opções em Jaraguá do Sul (Aba 1)",
+    desc: "Comparar empreendimentos em Água Verde/Rau, Jaraguá Esquerdo, Vila Lenzi ou Três Rios do Norte e cadastrar as propostas reais na Aba 1.",
   },
   {
     id: "chk-6",
-    category: "Imóvel",
-    title: "Simular Financiamento em 1 CPF vs. Composição de Renda do Casal",
-    desc: "Verificar na Aba 1 se a renda individual ou conjunta enquadra vocês na Faixa 3 do Minha Casa Minha Vida (teto R$ 400 mil, renda até R$ 9.600) ou Faixa 4.",
+    category: "Jaraguá do Sul",
+    title: "Checar 36 meses de vínculo CLT (Desconto Cotista FGTS na Caixa)",
+    desc: "Mesmo com saldo zero de FGTS, 3 anos de carteira assinada somados reduzem em 0,5% a.a. os juros do financiamento na Caixa.",
   },
   {
     id: "chk-7",
-    category: "Imóvel",
-    title: "Auditar Empreendimentos na Planta (Crédito Associativo + Afetação)",
-    desc: "Exigir financiamento via Crédito Associativo (para congelar os 80% contra o INCC), planilha da Taxa de Evolução de Obra e registro de Patrimônio de Afetação.",
+    category: "Jaraguá do Sul",
+    title: "Exigir Crédito Associativo + Patrimônio de Afetação na construtora",
+    desc: "Para imóveis na planta até R$ 400 mil em Jaraguá do Sul, exigir assinatura via Crédito Associativo (congela os 80% contra o INCC).",
   },
   {
     id: "chk-8",
     category: "Carteira",
-    title: "Iniciar a Caixa 3 (Tesouro IPCA+ 2032 + ETF Global/FIIs)",
-    desc: "Automatizar os 20% a 25% do aporte mensal para a carteira de longo prazo, garantindo que vocês continuem ricos após pagar a entrada do apartamento.",
+    title: "Manter os 25% da Caixa 3 (Tesouro IPCA+ 2032 + ETF Global/FIIs)",
+    desc: "Garantir que no dia da entrega das chaves em Jaraguá do Sul vocês continuem com a Reserva Blindada + Carteira de Longo Prazo.",
   },
 ];
 
@@ -89,13 +106,14 @@ function fmtBRL(value: number): string {
 }
 
 export default function PlanejadorCasalPage() {
-  // Theme state
   const [darkMode, setDarkMode] = useState<boolean>(true);
-
-  // Active tab
   const [activeTab, setActiveTab] = useState<
-    "simulador" | "planta" | "guia" | "plano"
-  >("simulador");
+    "jaragua" | "mercado" | "simulador" | "planta" | "plano"
+  >("jaragua");
+
+  // Market Live State
+  const [market, setMarket] = useState<MarketIndicators>(DEFAULT_MARKET_INDICATORS);
+  const [loadingMarket, setLoadingMarket] = useState<boolean>(false);
 
   // Couple & Financial Parameters
   const [userName, setUserName] = useState<string>("Você");
@@ -110,24 +128,66 @@ export default function PlanejadorCasalPage() {
   const [partMonthly, setPartMonthly] = useState<number>(1000);
   const [partIncome, setPartIncome] = useState<number>(4500);
 
-  const [propPrice, setPropPrice] = useState<number>(375000);
-  const [months, setMonths] = useState<number>(36);
+  // Selected Property in Jaraguá do Sul
+  const [selectedPropId, setSelectedPropId] = useState<string>(
+    "rogga-frankfurt-agua-verde"
+  );
+  const [customProps, setCustomProps] = useState<JaraguaProperty[]>([]);
+  const [showAddForm, setShowAddForm] = useState<boolean>(false);
+  const [newPropName, setNewPropName] = useState<string>("");
+  const [newPropNeighborhood, setNewPropNeighborhood] = useState<string>("Água Verde");
+  const [newPropPrice, setNewPropPrice] = useState<number>(370000);
+  const [newPropArea, setNewPropArea] = useState<number>(50);
+  const [newPropMonths, setNewPropMonths] = useState<number>(30);
+  const [newPropSignalPct, setNewPropSignalPct] = useState<number>(8);
+
+  const [propPrice, setPropPrice] = useState<number>(376000);
+  const [months, setMonths] = useState<number>(30);
   const [splitImovelPct, setSplitImovelPct] = useState<number>(75);
 
-  // Tab 2 specific stress-test sliders
-  const [inccAnnual, setInccAnnual] = useState<number>(5.5);
-  const [reformaCost, setReformaCost] = useState<number>(30000);
+  // Off-plan stress test parameters
+  const [inccAnnual, setInccAnnual] = useState<number>(5.48);
+  const [reformaCost, setReformaCost] = useState<number>(28000);
+  const [signalPct, setSignalPct] = useState<number>(8);
 
-  // Tab 3 converter state
-  const [lciRate, setLciRate] = useState<number>(91);
-  const [irBracket, setIrBracket] = useState<number>(0.175);
+  // LCI/LCA converter state
+  const [lciRate, setLciRate] = useState<number>(92);
+  const [irBracket, setIrBracket] = useState<number>(0.15);
 
-  // Checklist state
+  // Checklist & Share state
   const [checkedIds, setCheckedIds] = useState<Record<string, boolean>>({});
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
 
-  // Load saved state or URL parameters on mount
+  const allProperties = useMemo(
+    () => [...JARAGUA_PROPERTIES, ...customProps],
+    [customProps]
+  );
+
+  const activeProperty = useMemo(
+    () =>
+      allProperties.find((p) => p.id === selectedPropId) ||
+      JARAGUA_PROPERTIES[0],
+    [allProperties, selectedPropId]
+  );
+
+  // Fetch live Central Bank indicators
+  const syncMarketData = async () => {
+    setLoadingMarket(true);
+    try {
+      const live = await fetchLiveMarketIndicators();
+      setMarket(live);
+      if (live.incc12m > 0) {
+        setInccAnnual(live.incc12m);
+      }
+    } finally {
+      setLoadingMarket(false);
+    }
+  };
+
+  // Load saved state + fetch live BCB market indicators on mount
   useEffect(() => {
+    syncMarketData();
+
     try {
       const savedTheme = localStorage.getItem("cio_theme");
       if (savedTheme === "light") {
@@ -139,9 +199,10 @@ export default function PlanejadorCasalPage() {
       }
 
       const savedChecks = localStorage.getItem("cio_checklist");
-      if (savedChecks) {
-        setCheckedIds(JSON.parse(savedChecks));
-      }
+      if (savedChecks) setCheckedIds(JSON.parse(savedChecks));
+
+      const savedCustomProps = localStorage.getItem("cio_jaragua_custom_props");
+      if (savedCustomProps) setCustomProps(JSON.parse(savedCustomProps));
 
       const params = new URLSearchParams(window.location.search);
       if (params.has("uInit")) {
@@ -152,13 +213,14 @@ export default function PlanejadorCasalPage() {
         setPartInit(Number(params.get("pInit")) || 0);
         setPartMonthly(Number(params.get("pMon")) || 0);
         setPartIncome(Number(params.get("pInc")) || 4500);
-        setPropPrice(Number(params.get("price")) || 375000);
-        setMonths(Number(params.get("m")) || 36);
+        setPropPrice(Number(params.get("price")) || 376000);
+        setMonths(Number(params.get("m")) || 30);
         setSplitImovelPct(Number(params.get("split")) || 75);
+        if (params.get("propId")) setSelectedPropId(params.get("propId")!);
         if (params.get("uName")) setUserName(params.get("uName")!);
         if (params.get("pName")) setPartnerName(params.get("pName")!);
       } else {
-        const savedState = localStorage.getItem("cio_sim_state");
+        const savedState = localStorage.getItem("cio_sim_state_v2");
         if (savedState) {
           const parsed = JSON.parse(savedState);
           setUserInit(parsed.userInit ?? 60000);
@@ -168,23 +230,24 @@ export default function PlanejadorCasalPage() {
           setPartInit(parsed.partInit ?? 5000);
           setPartMonthly(parsed.partMonthly ?? 1000);
           setPartIncome(parsed.partIncome ?? 4500);
-          setPropPrice(parsed.propPrice ?? 375000);
-          setMonths(parsed.months ?? 36);
+          setPropPrice(parsed.propPrice ?? 376000);
+          setMonths(parsed.months ?? 30);
           setSplitImovelPct(parsed.splitImovelPct ?? 75);
+          if (parsed.selectedPropId) setSelectedPropId(parsed.selectedPropId);
           if (parsed.userName) setUserName(parsed.userName);
           if (parsed.partnerName) setPartnerName(parsed.partnerName);
         }
       }
     } catch {
-      // Ignore storage errors in private mode
+      // Ignore storage errors
     }
   }, []);
 
-  // Save state to localStorage on change
+  // Persist simulation state
   useEffect(() => {
     try {
       localStorage.setItem(
-        "cio_sim_state",
+        "cio_sim_state_v2",
         JSON.stringify({
           userInit,
           userRes,
@@ -196,12 +259,13 @@ export default function PlanejadorCasalPage() {
           propPrice,
           months,
           splitImovelPct,
+          selectedPropId,
           userName,
           partnerName,
         })
       );
     } catch {
-      // Ignore storage errors
+      // Ignore
     }
   }, [
     userInit,
@@ -214,9 +278,67 @@ export default function PlanejadorCasalPage() {
     propPrice,
     months,
     splitImovelPct,
+    selectedPropId,
     userName,
     partnerName,
   ]);
+
+  const selectJaraguaProperty = (prop: JaraguaProperty) => {
+    setSelectedPropId(prop.id);
+    setPropPrice(prop.price);
+    setMonths(prop.deliveryMonths);
+    setReformaCost(prop.recommendedFinishReserve);
+    setSignalPct(prop.signalPct);
+  };
+
+  const handleAddCustomProperty = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPropName.trim()) return;
+    const created: JaraguaProperty = {
+      id: "custom-" + Date.now(),
+      name: newPropName.trim(),
+      builder: "Cotação Local Visitada",
+      neighborhood: newPropNeighborhood,
+      price: newPropPrice,
+      areaM2: newPropArea,
+      bedrooms: 2,
+      parkingSpots: 1,
+      deliveryMonths: newPropMonths,
+      downPaymentPct: 20,
+      signalPct: newPropSignalPct,
+      financingType: newPropPrice <= 400000 ? "Associativo_MCMV" : "Direto_INCC",
+      highlights: [
+        `${newPropArea} m² em ${newPropNeighborhood} (${fmtBRL(newPropPrice / newPropArea)}/m²)`,
+        `Sinal de ${newPropSignalPct}% (${fmtBRL((newPropPrice * newPropSignalPct) / 100)}) + obra em ${newPropMonths} meses`,
+      ],
+      recommendedFinishReserve: 28000,
+      sourceNote: "Cadastrado manualmente pelo casal",
+      isCustom: true,
+    };
+    const updated = [...customProps, created];
+    setCustomProps(updated);
+    try {
+      localStorage.setItem("cio_jaragua_custom_props", JSON.stringify(updated));
+    } catch {
+      // Ignore
+    }
+    selectJaraguaProperty(created);
+    setNewPropName("");
+    setShowAddForm(false);
+  };
+
+  const handleDeleteCustomProp = (id: string) => {
+    const updated = customProps.filter((p) => p.id !== id);
+    setCustomProps(updated);
+    try {
+      localStorage.setItem("cio_jaragua_custom_props", JSON.stringify(updated));
+    } catch {
+      // Ignore
+    }
+    if (selectedPropId === id) {
+      selectJaraguaProperty(JARAGUA_PROPERTIES[0]);
+    }
+  };
 
   const toggleTheme = () => {
     const next = !darkMode;
@@ -240,11 +362,8 @@ export default function PlanejadorCasalPage() {
     setPartInit(5000);
     setPartMonthly(1000);
     setPartIncome(4500);
-    setPropPrice(375000);
-    setMonths(36);
+    selectJaraguaProperty(JARAGUA_PROPERTIES[0]);
     setSplitImovelPct(75);
-    setInccAnnual(5.5);
-    setReformaCost(30000);
   };
 
   const handleShareSimulation = () => {
@@ -259,6 +378,7 @@ export default function PlanejadorCasalPage() {
     url.searchParams.set("price", String(propPrice));
     url.searchParams.set("m", String(months));
     url.searchParams.set("split", String(splitImovelPct));
+    url.searchParams.set("propId", selectedPropId);
     url.searchParams.set("uName", userName);
     url.searchParams.set("pName", partnerName);
     navigator.clipboard.writeText(url.toString());
@@ -276,8 +396,15 @@ export default function PlanejadorCasalPage() {
     }
   };
 
-  // Core Financial Calculations
+  // Asset Ranking based on live market rates
+  const assetRanking = useMemo(
+    () => buildAssetRanking(market, months, lciRate),
+    [market, months, lciRate]
+  );
+
+  // Core Financial Calculations driven by Live Market Rates & Selected Jaraguá Property
   const sim = useMemo(() => {
+    const ir = getIrRateForMonths(months);
     const safeRes = Math.min(userRes, Math.max(0, userInit - 5000));
     const userExRes = Math.max(0, userInit - safeRes);
     const c3Init = Math.min(5000, userExRes * 0.2);
@@ -291,10 +418,20 @@ export default function PlanejadorCasalPage() {
     const c2Monthly = coupleMonthly * splitRatio;
     const c3Monthly = coupleMonthly * (1 - splitRatio);
 
-    // Net compound monthly rates (with Selic at 13.75% a.a.)
-    const r1 = Math.pow(1 + 0.112, 1 / 12) - 1; // ~11.2% a.a. net (100% CDI after IR)
-    const r2 = Math.pow(1 + 0.116, 1 / 12) - 1; // ~11.6% a.a. net (10k at 120% CDI + LCI/LCA 91% CDI tax-free)
-    const r3 = Math.pow(1 + 0.114, 1 / 12) - 1; // ~11.4% a.a. net (IPCA+ 2032 + ETF/FIIs)
+    // Dynamic Net Rates from Market Indicators
+    const c1NetAnnual = (market.cdi * (1 - ir)) / 100; // 100% CDI net
+    // Box 2 mixes 120% CDI initial + LCI/LCA tax-free monthly contributions
+    const lciNetAnnual = (market.cdi * (lciRate / 100)) / 100;
+    const cdb120NetAnnual = (market.cdi * 1.2 * (1 - ir)) / 100;
+    const c2NetAnnual = lciNetAnnual * 0.8 + cdb120NetAnnual * 0.2;
+    // Box 3 mixes Tesouro IPCA+ 2032 + Global ETF/FIIs
+    const ipcaDec = market.ipca12m / 100;
+    const tesouroIpcaGross = (1 + ipcaDec) * (1 + market.tesouroIpcaReal / 100) - 1;
+    const c3NetAnnual = tesouroIpcaGross * (1 - 0.15);
+
+    const r1 = Math.pow(1 + c1NetAnnual, 1 / 12) - 1;
+    const r2 = Math.pow(1 + c2NetAnnual, 1 / 12) - 1;
+    const r3 = Math.pow(1 + c3NetAnnual, 1 / 12) - 1;
 
     const c1Series: number[] = [c1Init];
     const c2Series: number[] = [c2Init];
@@ -316,46 +453,55 @@ export default function PlanejadorCasalPage() {
     }
 
     const downPayment20 = propPrice * 0.2;
-    const docsItbi5 = propPrice * 0.05;
-    const targetPronto = downPayment20 + docsItbi5; // 25% total cash needed for ready property
-    const targetPlanta = targetPronto + reformaCost; // Includes flooring/cabinetry on delivery
+    const docsItbi5 = propPrice * 0.05; // ITBI Jaraguá do Sul (2%) + Escritura/Registro/Vistoria (~2.5-3%)
+    const targetPronto = downPayment20 + docsItbi5;
+    const targetPlanta = targetPronto + reformaCost;
 
     const totalFinal = cur1 + cur2 + cur3;
     const leftoverPronto = totalFinal - targetPronto;
     const c2InterestEarned = cur2 - (c2Init + c2Monthly * months);
 
-    // Proportional Ownership (Caixa 2 + Caixa 3 contributions)
+    // Proportional Ownership (Caixa 2 + Caixa 3)
     const userCommitted = userExRes + userMonthly * months;
     const partCommitted = partInit + partMonthly * months;
     const totalCommitted = Math.max(1, userCommitted + partCommitted);
     const userSharePct = (userCommitted / totalCommitted) * 100;
     const partSharePct = (partCommitted / totalCommitted) * 100;
 
-    // Off-plan (Na Planta) specific math
-    const signal8 = propPrice * 0.08;
-    const builder12 = propPrice * 0.12;
-    const avgBuilderMonthly = (builder12 / months) * (1 + (inccAnnual / 100) * (months / 24));
+    // Off-plan (Na Planta) specific math for Jaraguá do Sul
+    const signalAmount = (propPrice * signalPct) / 100;
+    const restEntryPct = Math.max(0, 20 - signalPct);
+    const builderEntryRest = (propPrice * restEntryPct) / 100;
+    const avgBuilderMonthly =
+      (builderEntryRest / months) * (1 + (inccAnnual / 100) * (months / 24));
     const financed80 = propPrice * 0.8;
-    const totalObraEvolutionFee = financed80 * 0.0033 * months; // ~0.33% avg of debt per month during construction
-    const inccCorrectedDebt80 = financed80 * Math.pow(1 + inccAnnual / 100, months / 12);
+    const totalObraEvolutionFee = financed80 * 0.0033 * months;
+    const inccCorrectedDebt80 =
+      financed80 * Math.pow(1 + inccAnnual / 100, months / 12);
     const inccDebtIncrease = inccCorrectedDebt80 - financed80;
 
-    // MCMV / Financing bracket analysis
+    // MCMV / Financing bracket analysis in Jaraguá do Sul (SC)
     const combinedIncome = userIncome + partIncome;
     let mcmvStatus = "";
     let estimatedRate = "";
     if (propPrice <= 400000 && combinedIncome <= 9600) {
-      mcmvStatus = "Enquadra no MCMV Faixa 3 (Renda Familiar até R$ 9.600 e Imóvel até R$ 400 mil)";
-      estimatedRate = "7,66% a 8,16% a.a. + TR";
-    } else if (propPrice <= 400000 && userIncome <= 9600 && combinedIncome > 9600) {
       mcmvStatus =
-        "Dica de Ouro: Renda somada passa de R$ 9.600 (Faixa 4), mas em 1 único CPF entra na Faixa 3!";
-      estimatedRate = "Faixa 3 (~8,16% a.a.) em 1 CPF vs. Faixa 4 (~10,0% a.a.) compondo renda";
+        "Enquadra no MCMV Faixa 3 em Jaraguá do Sul (Renda até R$ 9.600 e Imóvel até R$ 400 mil)";
+      estimatedRate = "7,66% a 8,16% a.a. + TR";
+    } else if (
+      propPrice <= 400000 &&
+      userIncome <= 9600 &&
+      combinedIncome > 9600
+    ) {
+      mcmvStatus =
+        "Estratégia Inteligente: Renda somada passa de R$ 9.600 (Faixa 4), mas financiando em 1 único CPF você pega juros reduzidos da Faixa 3!";
+      estimatedRate = "Faixa 3 (~8,16% a.a.) em 1 CPF vs. Faixa 4 (~10,0% a.a.)";
     } else if (propPrice <= 600000 && combinedIncome <= 13000) {
-      mcmvStatus = "Enquadra no MCMV Faixa 4 - Classe Média (Renda até R$ 13.000)";
+      mcmvStatus =
+        "Enquadra no MCMV Faixa 4 - Classe Média (Imóvel até R$ 600 mil e Renda até R$ 13.000)";
       estimatedRate = "~10,0% a 10,5% a.a. + TR";
     } else {
-      mcmvStatus = "Financiamento via SFH Tradicional (Mercado)";
+      mcmvStatus = "Financiamento via SFH Tradicional (Taxas de Mercado)";
       estimatedRate = "~11,0% a 12,0% a.a. + TR";
     }
 
@@ -370,6 +516,9 @@ export default function PlanejadorCasalPage() {
       coupleMonthly,
       c2Monthly,
       c3Monthly,
+      c1NetAnnual: c1NetAnnual * 100,
+      c2NetAnnual: c2NetAnnual * 100,
+      c3NetAnnual: c3NetAnnual * 100,
       c1Series,
       c2Series,
       c3Series,
@@ -384,7 +533,7 @@ export default function PlanejadorCasalPage() {
       partCommitted,
       userSharePct,
       partSharePct,
-      signal8,
+      signalAmount,
       avgBuilderMonthly,
       financed80,
       totalObraEvolutionFee,
@@ -407,6 +556,9 @@ export default function PlanejadorCasalPage() {
     splitImovelPct,
     inccAnnual,
     reformaCost,
+    signalPct,
+    market,
+    lciRate,
   ]);
 
   const completedChecks = Object.values(checkedIds).filter(Boolean).length;
@@ -414,37 +566,48 @@ export default function PlanejadorCasalPage() {
   return (
     <div className="min-h-screen pb-16">
       {/* Top Navbar */}
-      <header className="sticky top-0 z-30 backdrop-blur-md bg-white/85 dark:bg-slate-900/85 border-b border-slate-200 dark:border-slate-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
+      <header className="sticky top-0 z-30 backdrop-blur-md bg-white/90 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold shadow-sm">
               <Building2 className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
-                  Copiloto CIO & CFP®
+                  Jaraguá do Sul • SC
                 </span>
-                <span className="text-xs text-slate-500 dark:text-slate-400">
-                  Selic: 13,75% a.a. • IPCA+: ~7,9% a.a.
+                <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                  ● {market.source === "BCB_LIVE" ? "Conectado ao Banco Central" : "Dados Copom/BCB"}
                 </span>
               </div>
               <h1 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
-                Planejador do Casal: Imóvel (R$ 350k–400k) + Crescimento Patrimonial
+                Planejador Imobiliário & Patrimonial ({userName} & {partnerName})
               </h1>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <button
+              onClick={syncMarketData}
+              disabled={loadingMarket}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 hover:bg-blue-100 transition"
+              title="Buscar Selic, CDI, IPCA e INCC atualizados na API do Banco Central do Brasil"
+            >
+              <RefreshCw
+                className={`w-3.5 h-3.5 ${loadingMarket ? "animate-spin" : ""}`}
+              />
+              <span className="hidden md:inline">Atualizar Mercado (BCB)</span>
+            </button>
+
+            <button
               onClick={handleShareSimulation}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition"
-              title="Gera um link com todos os números atuais para enviar no WhatsApp"
             >
               {copiedLink ? (
                 <>
                   <Check className="w-4 h-4" />
-                  <span>Link Copiado p/ WhatsApp!</span>
+                  <span>Link Copiado!</span>
                 </>
               ) : (
                 <>
@@ -456,20 +619,73 @@ export default function PlanejadorCasalPage() {
 
             <button
               onClick={resetDefaults}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition"
-              title="Restaurar valores originais (60k inicial, 30k reserva, 2k/mês)"
+              className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition"
+              title="Restaurar valores originais"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Restaurar Base</span>
             </button>
 
             <button
               onClick={toggleTheme}
               className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition"
-              aria-label="Alternar tema claro/escuro"
+              aria-label="Alternar tema"
             >
-              {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
+              {darkMode ? (
+                <Sun className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Moon className="w-4 h-4" />
+              )}
             </button>
+          </div>
+        </div>
+
+        {/* Live Market Ticker Bar */}
+        <div className="bg-slate-100/90 dark:bg-slate-950/90 border-t border-slate-200/70 dark:border-slate-800/80 px-4 sm:px-6 py-1.5">
+          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex flex-wrap items-center gap-4">
+              <span>
+                <strong className="text-slate-700 dark:text-slate-300">Selic:</strong>{" "}
+                <span className="font-bold text-blue-600 dark:text-blue-400">
+                  {market.selic.toFixed(2).replace(".", ",")}% a.a.
+                </span>
+              </span>
+              <span>
+                <strong className="text-slate-700 dark:text-slate-300">CDI:</strong>{" "}
+                <span className="font-bold text-blue-600 dark:text-blue-400">
+                  {market.cdi.toFixed(2).replace(".", ",")}% a.a.
+                </span>
+              </span>
+              <span>
+                <strong className="text-slate-700 dark:text-slate-300">IPCA (12m):</strong>{" "}
+                <span className="font-bold text-amber-600 dark:text-amber-400">
+                  {market.ipca12m.toFixed(2).replace(".", ",")}%
+                </span>
+              </span>
+              <span>
+                <strong className="text-slate-700 dark:text-slate-300">INCC Obra (12m):</strong>{" "}
+                <span className="font-bold text-amber-600 dark:text-amber-400">
+                  {market.incc12m.toFixed(2).replace(".", ",")}%
+                </span>
+              </span>
+              <span>
+                <strong className="text-slate-700 dark:text-slate-300">Tesouro IPCA+ 2032:</strong>{" "}
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                  IPCA + {market.tesouroIpcaReal.toFixed(2).replace(".", ",")}%
+                </span>
+              </span>
+              <span>
+                <strong className="text-slate-700 dark:text-slate-300">Dólar:</strong>{" "}
+                <span className="font-semibold">
+                  R$ {market.usdBrl.toFixed(2).replace(".", ",")}
+                </span>
+              </span>
+            </div>
+            <div className="text-slate-500 dark:text-slate-400">
+              Imóvel Cotado:{" "}
+              <strong className="text-slate-900 dark:text-white">
+                {activeProperty.name} ({fmtBRL(propPrice)})
+              </strong>
+            </div>
           </div>
         </div>
       </header>
@@ -481,10 +697,10 @@ export default function PlanejadorCasalPage() {
             <div>
               <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Calculator className="w-4 h-4 text-blue-500" />
-                Painel de Simulação em Tempo Real ({userName} & {partnerName})
+                Parâmetros do Casal & Imóvel Selecionado em Jaraguá do Sul
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Ajuste os controles abaixo. Todas as abas, gráficos e cálculos de participação atualizam instantaneamente.
+                Selecione um empreendimento na Aba 1 ou ajuste livremente os controles abaixo.
               </p>
             </div>
             <div className="flex items-center gap-2 text-xs">
@@ -508,7 +724,7 @@ export default function PlanejadorCasalPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {/* Coluna 1: Você */}
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200/80 dark:border-slate-800 space-y-3.5">
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200/80 dark:border-slate-800 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                   <Wallet className="w-4 h-4 text-blue-500" />
@@ -591,14 +807,14 @@ export default function PlanejadorCasalPage() {
             </div>
 
             {/* Coluna 2: Namorada */}
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200/80 dark:border-slate-800 space-y-3.5">
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200/80 dark:border-slate-800 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                   <Users className="w-4 h-4 text-purple-500" />
                   {partnerName} (Participação)
                 </span>
                 <span className="text-xs px-2 py-0.5 rounded-md bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 font-medium">
-                  Simulação Conjunta
+                  Soma Forças
                 </span>
               </div>
 
@@ -670,21 +886,21 @@ export default function PlanejadorCasalPage() {
               </div>
             </div>
 
-            {/* Coluna 3: Imóvel & Prazo */}
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200/80 dark:border-slate-800 space-y-3.5">
+            {/* Coluna 3: Imóvel em Jaraguá do Sul */}
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200/80 dark:border-slate-800 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <Home className="w-4 h-4 text-amber-500" />
-                  Meta do Imóvel (Sem FGTS)
+                  <MapPin className="w-4 h-4 text-amber-500" />
+                  Cotação Jaraguá do Sul
                 </span>
                 <span className="text-xs px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-medium">
-                  {propPrice <= 400000 ? "Teto MCMV Faixa 3" : "Faixa 4 / SFH"}
+                  {propPrice <= 400000 ? "MCMV Faixa 3" : "Faixa 4 / SFH"}
                 </span>
               </div>
 
               <div>
                 <div className="flex justify-between text-xs mb-1">
-                  <span className="text-slate-500 dark:text-slate-400">Valor do Imóvel Alvo:</span>
+                  <span className="text-slate-500 dark:text-slate-400">Valor do Imóvel Cotado:</span>
                   <span className="font-bold text-slate-900 dark:text-white">
                     {fmtBRL(propPrice)}
                   </span>
@@ -692,8 +908,8 @@ export default function PlanejadorCasalPage() {
                 <input
                   type="range"
                   min={300000}
-                  max={500000}
-                  step={5000}
+                  max={550000}
+                  step={2000}
                   value={propPrice}
                   onChange={(e) => setPropPrice(Number(e.target.value))}
                   className="w-full cursor-pointer"
@@ -702,7 +918,7 @@ export default function PlanejadorCasalPage() {
 
               <div>
                 <div className="flex justify-between text-xs mb-1">
-                  <span className="text-slate-500 dark:text-slate-400">Prazo (Acumulação / Obra):</span>
+                  <span className="text-slate-500 dark:text-slate-400">Prazo Obra / Acumulação:</span>
                   <span className="font-bold text-slate-900 dark:text-white">
                     {months} meses ({(months / 12).toFixed(1).replace(".0", "")} anos)
                   </span>
@@ -738,10 +954,10 @@ export default function PlanejadorCasalPage() {
 
               <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center text-xs">
                 <span className="text-slate-500 dark:text-slate-400">
-                  Meta 20% Entrada + 5% ITBI/Docs:
+                  Sinal Ato ({signalPct}%) / Hoje na Caixa 2:
                 </span>
-                <span className="text-sm font-bold text-amber-600 dark:text-amber-400">
-                  {fmtBRL(sim.targetPronto)}
+                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                  {fmtBRL(sim.signalAmount)} / {fmtBRL(sim.c2Init)}
                 </span>
               </div>
             </div>
@@ -752,23 +968,28 @@ export default function PlanejadorCasalPage() {
         <nav className="flex flex-wrap gap-2" role="tablist">
           {[
             {
+              id: "jaragua",
+              label: "1. Imóveis na Planta: Jaraguá do Sul (SC)",
+              icon: MapPin,
+            },
+            {
+              id: "mercado",
+              label: "2. Ranking do Mercado: O Que Mais Compensa",
+              icon: Award,
+            },
+            {
               id: "simulador",
-              label: "1. Simulador das 3 Caixas & Casal",
+              label: "3. Simulador das 3 Caixas & Casal",
               icon: TrendingUp,
             },
             {
               id: "planta",
-              label: "2. Imóvel Pronto vs. Na Planta",
+              label: "4. Raio-X: Pronto vs. Na Planta (INCC)",
               icon: Building2,
             },
             {
-              id: "guia",
-              label: "3. Guia: O Que e Como Investir",
-              icon: BookOpen,
-            },
-            {
               id: "plano",
-              label: `4. Rotina Mensal & Checklist (${completedChecks}/${CHECKLIST_ITEMS.length})`,
+              label: `5. Rotina & Checklist (${completedChecks}/${CHECKLIST_ITEMS.length})`,
               icon: CheckSquare,
             },
           ].map((tab) => {
@@ -791,10 +1012,510 @@ export default function PlanejadorCasalPage() {
           })}
         </nav>
 
-        {/* ==================== TAB 1: SIMULADOR DAS 3 CAIXAS & CASAL ==================== */}
+        {/* ==================== TAB 1: IMÓVEIS NA PLANTA EM JARAGUÁ DO SUL - SC ==================== */}
+        {activeTab === "jaragua" && (
+          <div className="space-y-6">
+            {/* Header & Custom Add Button */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <span className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                    Mapeamento Imobiliário Local • Jaraguá do Sul (SC)
+                  </span>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">
+                    Cotações Reais de Empreendimentos na Planta e Bairros de Jaraguá do Sul
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Clique em <strong>&ldquo;Cotar Este Imóvel&rdquo;</strong> em qualquer opção abaixo para carregar o valor, prazo de obra, sinal e reserva de piso/marcenaria diretamente na simulação do casal.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowAddForm(!showAddForm)}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-sm transition shrink-0"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>Cadastrar Proposta Visitada em Jaraguá</span>
+                </button>
+              </div>
+
+              {/* Form to add a custom visited property in Jaraguá do Sul */}
+              {showAddForm && (
+                <form
+                  onSubmit={handleAddCustomProperty}
+                  className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3 text-xs"
+                >
+                  <div className="sm:col-span-2">
+                    <label className="block text-slate-500 mb-1">Nome do Residencial / Prédio:</label>
+                    <input
+                      type="text"
+                      required
+                      value={newPropName}
+                      onChange={(e) => setNewPropName(e.target.value)}
+                      placeholder="Ex: Residencial Vista Jaraguá"
+                      className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 mb-1">Bairro em Jaraguá:</label>
+                    <input
+                      type="text"
+                      required
+                      value={newPropNeighborhood}
+                      onChange={(e) => setNewPropNeighborhood(e.target.value)}
+                      placeholder="Ex: Vila Lenzi"
+                      className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 mb-1">Valor Tabelado (R$):</label>
+                    <input
+                      type="number"
+                      required
+                      min={200000}
+                      max={1500000}
+                      step={1000}
+                      value={newPropPrice}
+                      onChange={(e) => setNewPropPrice(Number(e.target.value))}
+                      className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 mb-1">Área (m²) / Prazo (meses):</label>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="number"
+                        required
+                        min={30}
+                        max={200}
+                        value={newPropArea}
+                        onChange={(e) => setNewPropArea(Number(e.target.value))}
+                        className="w-1/2 p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-medium"
+                        title="Área privativa em m²"
+                      />
+                      <input
+                        type="number"
+                        required
+                        min={6}
+                        max={60}
+                        value={newPropMonths}
+                        onChange={(e) => setNewPropMonths(Number(e.target.value))}
+                        className="w-1/2 p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-medium"
+                        title="Meses até a entrega das chaves"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-end">
+                    <button
+                      type="submit"
+                      className="w-full py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition"
+                    >
+                      Salvar & Simular
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+
+            {/* Cards of Developments in Jaraguá do Sul */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {allProperties.map((prop) => {
+                const isSelected = prop.id === selectedPropId;
+                const pricePerM2 = prop.price / prop.areaM2;
+                const signalVal = (prop.price * prop.signalPct) / 100;
+                const restEntryVal = (prop.price * (prop.downPaymentPct - prop.signalPct)) / 100;
+                const monthlyDuringWork =
+                  (restEntryVal / prop.deliveryMonths) *
+                  (1 + (inccAnnual / 100) * (prop.deliveryMonths / 24));
+                const signalCoveredToday = sim.c2Init >= signalVal;
+
+                return (
+                  <div
+                    key={prop.id}
+                    className={`bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-sm flex flex-col justify-between transition ${
+                      isSelected
+                        ? "border-2 border-blue-600 ring-2 ring-blue-500/20"
+                        : "border border-slate-200 dark:border-slate-800"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 text-xs mb-2">
+                        <span className="px-2.5 py-0.5 rounded-full font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                          📍 {prop.neighborhood}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          {prop.price <= 400000 ? (
+                            <span className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-bold">
+                              MCMV Faixa 3
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold">
+                              Faixa 4 / SFH
+                            </span>
+                          )}
+                          {prop.isCustom && (
+                            <button
+                              onClick={() => handleDeleteCustomProp(prop.id)}
+                              className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-950 rounded"
+                              title="Remover cotação"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                        {prop.name}
+                      </h4>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {prop.builder} • {prop.areaM2} m² ({fmtBRL(pricePerM2)}/m²) •{" "}
+                        {prop.deliveryMonths} meses
+                      </p>
+
+                      <div className="mt-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200/70 dark:border-slate-800 space-y-1.5 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Valor do Imóvel:</span>
+                          <span className="font-extrabold text-slate-900 dark:text-white">
+                            {fmtBRL(prop.price)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">
+                            Sinal no Ato ({prop.signalPct}%):
+                          </span>
+                          <span
+                            className={`font-bold ${
+                              signalCoveredToday
+                                ? "text-emerald-600 dark:text-emerald-400"
+                                : "text-amber-600 dark:text-amber-400"
+                            }`}
+                          >
+                            {fmtBRL(signalVal)}{" "}
+                            {signalCoveredToday ? "(Vocês já têm!)" : "(Juntar +um pouco)"}
+                          </span>
+                        </div>
+                        {prop.financingType !== "Pronto" ? (
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">
+                              Mensais Obra ({prop.deliveryMonths}x c/ INCC):
+                            </span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200">
+                              ~{fmtBRL(monthlyDuringWork)}/mês
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Modalidade:</span>
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                              Juntar a 11,5% a.a. + Comprar Pronto
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Reserva Piso/Móveis nas Chaves:</span>
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">
+                            {fmtBRL(prop.recommendedFinishReserve)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <ul className="mt-3 space-y-1 text-xs text-slate-600 dark:text-slate-300">
+                        {prop.highlights.map((h, i) => (
+                          <li key={i} className="flex items-start gap-1.5">
+                            <span className="text-blue-500 mt-0.5">•</span>
+                            <span>{h}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <button
+                      onClick={() => selectJaraguaProperty(prop)}
+                      className={`mt-4 w-full py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                        isSelected
+                          ? "bg-emerald-600 text-white"
+                          : "bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90"
+                      }`}
+                    >
+                      {isSelected ? (
+                        <>
+                          <Check className="w-4 h-4" />
+                          <span>Imóvel Selecionado na Simulação</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Cotar e Simular Este Imóvel</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Neighborhood Price/m² Table for Jaraguá do Sul */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                🗺️ Raio-X do Metro Quadrado (m²) por Bairro em Jaraguá do Sul - SC
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Use esta tabela como referência quando um corretor apresentar um apartamento na planta em Jaraguá do Sul para saber se o preço por m² está justo:
+              </p>
+
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
+                      <th className="py-2.5 pr-4 font-semibold">Bairros (Jaraguá do Sul)</th>
+                      <th className="py-2.5 px-4 font-semibold">Perfil dos Lançamentos</th>
+                      <th className="py-2.5 px-4 font-semibold">Faixa de Valor / m²</th>
+                      <th className="py-2.5 px-4 font-semibold">Tíquete Médio (2 Quartos)</th>
+                      <th className="py-2.5 pl-4 font-semibold">Enquadramento MCMV</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
+                    {JARAGUA_NEIGHBORHOODS.map((b, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                        <td className="py-3 pr-4 font-bold text-slate-900 dark:text-white">
+                          {b.neighborhood}
+                        </td>
+                        <td className="py-3 px-4 text-slate-600 dark:text-slate-300">
+                          {b.profile}
+                        </td>
+                        <td className="py-3 px-4 font-semibold text-blue-600 dark:text-blue-400">
+                          {fmtBRL(b.avgPriceM2Min)} a {fmtBRL(b.avgPriceM2Max)}/m²
+                        </td>
+                        <td className="py-3 px-4 font-medium text-slate-800 dark:text-slate-200">
+                          {b.typicalTicket2Bed}
+                        </td>
+                        <td className="py-3 pl-4">
+                          <span
+                            className={`px-2 py-0.5 rounded font-semibold ${
+                              b.mcmvFit.includes("Alto")
+                                ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300"
+                                : b.mcmvFit.includes("Médio")
+                                ? "bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300"
+                                : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                            }`}
+                          >
+                            {b.mcmvFit}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==================== TAB 2: RANKING DO MERCADO FINANCEIRO ==================== */}
+        {activeTab === "mercado" && (
+          <div className="space-y-6">
+            {/* Market Scenario Stress-Test Controls */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+                <div>
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                    Radar de Renda Fixa & Juro Real • Atualizado ({market.lastUpdated})
+                  </span>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">
+                    O Que Está Compensando Mais Investir Hoje para o Prazo de {months} Meses?
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Ranking calculado já descontando a alíquota exata de Imposto de Renda ({(getIrRateForMonths(months) * 100).toFixed(1).replace(".0", "")}% para {months} meses) e descontando a inflação (IPCA de {market.ipca12m.toFixed(2).replace(".", ",")}% a.a.).
+                  </p>
+                </div>
+
+                {/* Custom Macroeconomic Sliders for Scenario Testing */}
+                <div className="flex flex-wrap gap-4">
+                  <div className="w-48">
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-slate-500">Selic / CDI Base:</span>
+                      <span className="font-bold text-blue-600 dark:text-blue-400">
+                        {market.selic.toFixed(2).replace(".", ",")}% a.a.
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={9.0}
+                      max={15.5}
+                      step={0.25}
+                      value={market.selic}
+                      onChange={(e) => {
+                        const s = Number(e.target.value);
+                        setMarket({ ...market, selic: s, cdi: Math.max(0.1, s - 0.1) });
+                      }}
+                      className="w-full cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="w-48">
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-slate-500">Taxa LCI/LCA Isenta:</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                        {lciRate}% do CDI
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={85}
+                      max={100}
+                      step={1}
+                      value={lciRate}
+                      onChange={(e) => setLciRate(Number(e.target.value))}
+                      className="w-full cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Ranking Table */}
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
+                      <th className="py-2.5 pr-3 font-semibold">#</th>
+                      <th className="py-2.5 px-3 font-semibold">Investimento</th>
+                      <th className="py-2.5 px-3 font-semibold">Caixa Ideal</th>
+                      <th className="py-2.5 px-3 font-semibold">Taxa Bruta</th>
+                      <th className="py-2.5 px-3 font-semibold">Desconto IR</th>
+                      <th className="py-2.5 px-3 font-semibold">Líquido no Bolso (% a.a.)</th>
+                      <th className="py-2.5 px-3 font-semibold">Ganho Real (Acima IPCA)</th>
+                      <th className="py-2.5 px-3 font-semibold">R$ 10.000 viram ({months}m)</th>
+                      <th className="py-2.5 pl-3 font-semibold">Veredito CIO</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
+                    {assetRanking.map((item, idx) => (
+                      <tr
+                        key={item.id}
+                        className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${
+                          idx < 2 ? "bg-emerald-50/30 dark:bg-emerald-950/15" : ""
+                        }`}
+                      >
+                        <td className="py-3 pr-3 font-extrabold text-slate-900 dark:text-white">
+                          {idx + 1}º
+                        </td>
+                        <td className="py-3 px-3 font-bold text-slate-900 dark:text-white">
+                          {item.name}
+                          <div className="text-[12px] font-normal text-slate-400">
+                            {item.fgcOrSovereign} • Liquidez: {item.liquidity}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span
+                            className={`px-2 py-0.5 rounded font-semibold ${
+                              item.recommendedBox.includes("Caixa 2")
+                                ? "bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300"
+                                : item.recommendedBox.includes("Caixa 3")
+                                ? "bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300"
+                                : item.recommendedBox.includes("Caixa 1")
+                                ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300"
+                                : "bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-300"
+                            }`}
+                          >
+                            {item.recommendedBox}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 font-medium">
+                          {item.grossAnnualPct.toFixed(2).replace(".", ",")}% a.a.
+                        </td>
+                        <td className="py-3 px-3">
+                          {item.irPct === 0 ? (
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                              Isento (0%)
+                            </span>
+                          ) : (
+                            <span className="text-slate-500">
+                              {item.irPct.toFixed(1).replace(".0", "")}%
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 font-extrabold text-sm text-blue-600 dark:text-blue-400">
+                          {item.netAnnualPct.toFixed(2).replace(".", ",")}% a.a.
+                        </td>
+                        <td className="py-3 px-3 font-bold text-emerald-600 dark:text-emerald-400">
+                          +{item.realAnnualPctOverIpca.toFixed(2).replace(".", ",")}% a.a.
+                        </td>
+                        <td className="py-3 px-3 font-bold text-slate-900 dark:text-white">
+                          {fmtBRL(item.netValueOn10kAfterMonths)}
+                        </td>
+                        <td className="py-3 pl-3 text-slate-600 dark:text-slate-300 max-w-xs">
+                          {item.cioVerdict}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Interactive LCI/LCA vs CDB Converter */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-blue-500" />
+                Conversor Rápido de Bolso: LCI/LCA (Isenta) vs. CDB (Tributado)
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 items-center">
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-slate-500">Taxa da LCI ou LCA no App:</span>
+                    <span className="font-bold text-blue-600 dark:text-blue-400">
+                      {lciRate}% do CDI
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={82}
+                    max={102}
+                    step={1}
+                    value={lciRate}
+                    onChange={(e) => setLciRate(Number(e.target.value))}
+                    className="w-full cursor-pointer"
+                  />
+                </div>
+
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                  <label className="block text-xs text-slate-500 mb-1.5">
+                    Prazo até resgatar (Alíquota de IR no CDB):
+                  </label>
+                  <select
+                    value={irBracket}
+                    onChange={(e) => setIrBracket(Number(e.target.value))}
+                    className="w-full p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold"
+                  >
+                    <option value={0.225}>Até 6 meses (IR de 22,5% no CDB)</option>
+                    <option value={0.2}>De 6 meses a 1 ano (IR de 20,0% no CDB)</option>
+                    <option value={0.175}>De 1 a 2 anos (IR de 17,5% no CDB)</option>
+                    <option value={0.15}>Acima de 2 anos (IR de 15,0% no CDB)</option>
+                  </select>
+                </div>
+
+                <div className="p-4 rounded-xl bg-blue-600 text-white">
+                  <div className="text-xs opacity-90">
+                    Para empatar com essa LCI/LCA ({lciRate}% CDI), o CDB precisa pagar:
+                  </div>
+                  <div className="text-lg font-extrabold mt-0.5">
+                    {(lciRate / (1 - irBracket)).toFixed(1).replace(".", ",")}% do CDI Bruto
+                  </div>
+                  <div className="text-xs opacity-90 mt-0.5">
+                    Retorno líquido no bolso:{" "}
+                    <strong>
+                      {((lciRate / 100) * market.cdi).toFixed(2).replace(".", ",")}% ao ano
+                    </strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==================== TAB 3: SIMULADOR DAS 3 CAIXAS & CASAL ==================== */}
         {activeTab === "simulador" && (
           <div className="space-y-6">
-            {/* 4 Key Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Caixa 1 */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col justify-between">
@@ -811,18 +1532,19 @@ export default function PlanejadorCasalPage() {
                     Reserva de Emergência
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Mantida em CDB 100% CDI Liquidez Diária / Tesouro Selic. Blindagem do casal antes e depois das chaves.
+                    CDB 100% CDI Liquidez Diária / Tesouro Selic. Rendendo{" "}
+                    <strong>{sim.c1NetAnnual.toFixed(2).replace(".", ",")}% a.a. líq.</strong>
                   </p>
                 </div>
                 <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                  <div className="text-xs text-slate-500">
                     Hoje: <strong className="text-slate-800 dark:text-slate-200">{fmtBRL(sim.c1Init)}</strong>
                   </div>
                   <div className="text-xl font-extrabold text-slate-900 dark:text-white mt-0.5">
                     {fmtBRL(sim.cur1)}
                   </div>
                   <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
-                    +{fmtBRL(sim.cur1 - sim.c1Init)} só de juros (~11,2% a.a. líq.)
+                    +{fmtBRL(sim.cur1 - sim.c1Init)} só de juros em {months}m
                   </div>
                 </div>
               </div>
@@ -832,7 +1554,7 @@ export default function PlanejadorCasalPage() {
                 <div>
                   <div className="flex items-center justify-between text-xs mb-2">
                     <span className="font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                      <Home className="w-4 h-4" /> Caixa 2 • Imóvel
+                      <Home className="w-4 h-4" /> Caixa 2 • Imóvel Jaraguá
                     </span>
                     <span
                       className={`px-2 py-0.5 rounded font-semibold ${
@@ -845,23 +1567,23 @@ export default function PlanejadorCasalPage() {
                     </span>
                   </div>
                   <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                    Fundo Entrada + Documentação
+                    {activeProperty.name}
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    10k em CDB 120% CDI + 15k em 100% CDI + Aportes de{" "}
-                    <strong>{fmtBRL(sim.c2Monthly)}/mês</strong> em LCI/LCA (90%+ CDI isenta).
+                    10k CDB 120% CDI + 15k 100% CDI +{" "}
+                    <strong>{fmtBRL(sim.c2Monthly)}/mês</strong> em LCI/LCA ({lciRate}% CDI isenta).
                   </p>
                 </div>
                 <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                  <div className="text-xs text-slate-500">
                     Hoje (Casal):{" "}
                     <strong className="text-slate-800 dark:text-slate-200">{fmtBRL(sim.c2Init)}</strong>
                   </div>
                   <div className="text-xl font-extrabold text-blue-600 dark:text-blue-400 mt-0.5">
                     {fmtBRL(sim.cur2)}
                   </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Meta 20% Entrada + 5% ITBI: <strong>{fmtBRL(sim.targetPronto)}</strong>
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    Meta 20% Entrada + 5% ITBI/Docs: <strong>{fmtBRL(sim.targetPronto)}</strong>
                   </div>
                 </div>
               </div>
@@ -881,19 +1603,19 @@ export default function PlanejadorCasalPage() {
                     Crescimento de Patrimônio
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Tesouro IPCA+ 2032 (~IPCA+7,9%) + ETF Global (WRLD11) ou FIIs. Recebe{" "}
+                    Tesouro IPCA+ 2032 + ETF Global (WRLD11) / FIIs. Recebe{" "}
                     <strong>{fmtBRL(sim.c3Monthly)}/mês</strong>.
                   </p>
                 </div>
                 <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                  <div className="text-xs text-slate-500">
                     Hoje: <strong className="text-slate-800 dark:text-slate-200">{fmtBRL(sim.c3Init)}</strong>
                   </div>
                   <div className="text-xl font-extrabold text-slate-900 dark:text-white mt-0.5">
                     {fmtBRL(sim.cur3)}
                   </div>
                   <div className="text-xs text-purple-600 dark:text-purple-400 mt-0.5">
-                    Continua rendendo após comprar o imóvel!
+                    Continua crescendo após pegar as chaves!
                   </div>
                 </div>
               </div>
@@ -903,21 +1625,22 @@ export default function PlanejadorCasalPage() {
                 <div>
                   <div className="flex items-center justify-between text-xs mb-2">
                     <span className="font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                      <Sparkles className="w-4 h-4" /> Pós-Compra
+                      <Sparkles className="w-4 h-4" /> Pós-Chaves
                     </span>
                     <span className="px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-medium">
-                      Segurança Total
+                      Patrimônio Livre
                     </span>
                   </div>
                   <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                    Patrimônio que Sobra Investido
+                    Sobra Líquida Após Comprar
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Saldo que permanece nas contas de vocês no dia seguinte a pagar os 20% de entrada + 5% de escritura/ITBI.
+                    Quanto resta investido após pagar Entrada (20%) + ITBI/Cartório (5%) de{" "}
+                    <strong>{activeProperty.name}</strong>.
                   </p>
                 </div>
                 <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                  <div className="text-xs text-slate-500">
                     Total Acumulado:{" "}
                     <strong className="text-slate-800 dark:text-slate-200">
                       {fmtBRL(sim.totalFinal)}
@@ -926,27 +1649,26 @@ export default function PlanejadorCasalPage() {
                   <div className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">
                     {fmtBRL(Math.max(0, sim.leftoverPronto))}
                   </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  <div className="text-xs text-slate-500 mt-0.5">
                     {sim.leftoverPronto >= sim.cur1 + reformaCost
-                      ? `Cobre Reserva + R$ 30k Piso/Móveis + Sobra!`
+                      ? `Cobre Reserva + ${fmtBRL(reformaCost)} Piso/Móveis + Sobra!`
                       : `Preserva a Reserva de ${fmtBRL(sim.cur1)}`}
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Chart + Couple Proportional Split */}
+            {/* Evolution Chart + Couple Share */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* SVG Interactive Evolution Chart */}
               <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col justify-between">
                 <div>
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
                     <div>
                       <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                        Evolução Patrimonial Mês a Mês ({months} meses)
+                        Curva de Acumulação das 3 Caixas ({months} meses)
                       </h3>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Crescimento conjunto com juros compostos líquidos de Imposto de Renda
+                        Simulação para {activeProperty.name} ({fmtBRL(propPrice)}) em Jaraguá do Sul
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -965,11 +1687,10 @@ export default function PlanejadorCasalPage() {
                     </div>
                   </div>
 
-                  {/* Responsive SVG Chart */}
                   <div className="w-full overflow-hidden pt-2">
                     {(() => {
                       const w = 680;
-                      const h = 260;
+                      const h = 250;
                       const padL = 70;
                       const padR = 20;
                       const padT = 20;
@@ -1001,7 +1722,6 @@ export default function PlanejadorCasalPage() {
                           viewBox={`0 0 ${w} ${h}`}
                           className="w-full h-auto select-none"
                         >
-                          {/* Horizontal grid lines */}
                           {[0, 0.25, 0.5, 0.75, 1].map((step, i) => {
                             const val = maxVal * step;
                             const y = toY(val);
@@ -1027,7 +1747,6 @@ export default function PlanejadorCasalPage() {
                             );
                           })}
 
-                          {/* X-Axis Labels */}
                           {[0, 0.25, 0.5, 0.75, 1].map((step, i) => {
                             const m = Math.round(months * step);
                             const x = toX(m);
@@ -1043,7 +1762,6 @@ export default function PlanejadorCasalPage() {
                             );
                           })}
 
-                          {/* Areas & Lines */}
                           <path
                             d={makeArea(sim.totalSeries)}
                             fill="rgba(16, 185, 129, 0.14)"
@@ -1066,7 +1784,6 @@ export default function PlanejadorCasalPage() {
                             strokeWidth="2.5"
                           />
 
-                          {/* Target Line */}
                           <line
                             x1={padL}
                             y1={targetY}
@@ -1082,35 +1799,33 @@ export default function PlanejadorCasalPage() {
                   </div>
                 </div>
 
-                {/* Enquadramento MCMV / Renda Bruta Card */}
                 <div className="mt-4 p-3.5 rounded-xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                   <div>
                     <div className="font-bold text-blue-900 dark:text-blue-200">
-                      🏦 Diagnóstico de Financiamento (Renda Bruta Combinada: {fmtBRL(sim.combinedIncome)})
+                      🏦 Enquadramento Caixa em Jaraguá do Sul (Renda Bruta: {fmtBRL(sim.combinedIncome)})
                     </div>
                     <div className="text-blue-800 dark:text-blue-300 mt-0.5">
                       {sim.mcmvStatus}
                     </div>
                   </div>
                   <div className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 font-bold text-blue-700 dark:text-blue-300 shrink-0">
-                    Taxa Est.: {sim.estimatedRate}
+                    Juros: {sim.estimatedRate}
                   </div>
                 </div>
               </div>
 
-              {/* Divisão Proporcional do Casal */}
+              {/* Couple Proportional Ownership */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col justify-between space-y-4">
                 <div>
                   <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                     <Users className="w-4 h-4 text-purple-500" />
-                    Divisão Justa do Casal no Contrato
+                    Divisão Proporcional no Contrato
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Cálculo proporcional transparente considerando o capital inicial (fora sua Reserva Blindada individual) + aportes mensais de cada um em {months} meses.
+                    Participação justa calculada sobre o capital alocado nas Caixas 2 e 3 ao longo de {months} meses (preservando sua Reserva Blindada individual).
                   </p>
 
                   <div className="mt-4 space-y-3">
-                    {/* Você */}
                     <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
                       <div className="flex justify-between text-xs mb-1.5">
                         <span className="font-bold text-slate-900 dark:text-white">
@@ -1126,7 +1841,7 @@ export default function PlanejadorCasalPage() {
                           style={{ width: `${sim.userSharePct}%` }}
                         />
                       </div>
-                      <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-2">
+                      <div className="flex justify-between text-xs text-slate-500 mt-2">
                         <span>
                           Inicial: {fmtBRL(Math.max(0, userInit - sim.c1Init))} + {fmtBRL(userMonthly)}/mês
                         </span>
@@ -1136,7 +1851,6 @@ export default function PlanejadorCasalPage() {
                       </div>
                     </div>
 
-                    {/* Namorada */}
                     <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
                       <div className="flex justify-between text-xs mb-1.5">
                         <span className="font-bold text-slate-900 dark:text-white">
@@ -1152,7 +1866,7 @@ export default function PlanejadorCasalPage() {
                           style={{ width: `${sim.partSharePct}%` }}
                         />
                       </div>
-                      <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-2">
+                      <div className="flex justify-between text-xs text-slate-500 mt-2">
                         <span>
                           Inicial: {fmtBRL(partInit)} + {fmtBRL(partMonthly)}/mês
                         </span>
@@ -1167,10 +1881,10 @@ export default function PlanejadorCasalPage() {
                 <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-800/70 text-xs text-slate-700 dark:text-slate-300 space-y-1">
                   <div className="font-bold flex items-center gap-1.5 text-slate-900 dark:text-white">
                     <Info className="w-4 h-4 text-blue-500 shrink-0" />
-                    Como organizar na prática:
+                    Dica de Governança do Casal:
                   </div>
                   <p>
-                    Cada um investe o seu aporte mensal na sua própria conta (em LCI/LCA para a Caixa 2). Assim vocês aproveitam o limite duplo do FGC (R$ 250 mil por CPF) e mantêm o histórico exato dos depósitos.
+                    Cada um aplica o próprio aporte mensal em uma LCI/LCA no seu próprio CPF. Além de facilitar o controle da participação, vocês dobram a garantia do FGC (R$ 250 mil para cada CPF).
                   </p>
                 </div>
               </div>
@@ -1178,52 +1892,51 @@ export default function PlanejadorCasalPage() {
           </div>
         )}
 
-        {/* ==================== TAB 2: IMÓVEL PRONTO VS. NA PLANTA ==================== */}
+        {/* ==================== TAB 4: RAIO-X PRONTO VS. NA PLANTA ==================== */}
         {activeTab === "planta" && (
           <div className="space-y-6">
-            {/* Stress-Test Controls for Off-Plan */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
                 <div>
                   <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                    Comparador Real: Comprar Pronto vs. Comprar na Planta ({fmtBRL(propPrice)})
+                    Comparador para {activeProperty.name} ({fmtBRL(propPrice)}) em Jaraguá do Sul
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Sem saldo de FGTS • Simule abaixo o impacto do INCC da obra e do custo de Piso/Marcenaria na entrega das chaves:
+                    Sem saldo de FGTS • Teste abaixo o impacto do INCC ({inccAnnual.toFixed(2).replace(".", ",")}% a.a.) e do Kit Chaves (Piso + Móveis):
                   </p>
                 </div>
 
                 <div className="flex flex-wrap gap-4">
-                  <div className="w-56">
+                  <div className="w-52">
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="text-slate-500 dark:text-slate-400">INCC Médio Anual:</span>
+                      <span className="text-slate-500">INCC Anual Estimado:</span>
                       <span className="font-bold text-amber-600 dark:text-amber-400">
-                        {inccAnnual.toFixed(1).replace(".", ",")}% a.a.
+                        {inccAnnual.toFixed(2).replace(".", ",")}% a.a.
                       </span>
                     </div>
                     <input
                       type="range"
                       min={3.5}
                       max={9.0}
-                      step={0.5}
+                      step={0.25}
                       value={inccAnnual}
                       onChange={(e) => setInccAnnual(Number(e.target.value))}
                       className="w-full cursor-pointer"
                     />
                   </div>
 
-                  <div className="w-60">
+                  <div className="w-56">
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="text-slate-500 dark:text-slate-400">Kit Chaves (Piso/Móveis):</span>
+                      <span className="text-slate-500">Kit Chaves (Piso/Móveis):</span>
                       <span className="font-bold text-slate-900 dark:text-white">
                         {fmtBRL(reformaCost)}
                       </span>
                     </div>
                     <input
                       type="range"
-                      min={15000}
+                      min={10000}
                       max={60000}
-                      step={2500}
+                      step={2000}
                       value={reformaCost}
                       onChange={(e) => setReformaCost(Number(e.target.value))}
                       className="w-full cursor-pointer"
@@ -1240,43 +1953,34 @@ export default function PlanejadorCasalPage() {
                       Estratégia A • Juros a Seu Favor
                     </span>
                     <h4 className="text-base font-bold text-slate-900 dark:text-white mt-2">
-                      Juntar Investindo + Comprar Pronto (ou Repasse)
+                      Juntar em LCI/LCA ({sim.c2NetAnnual.toFixed(1).replace(".", ",")}% a.a.) + Comprar Pronto
                     </h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      Vocês acumulam na Caixa 2 (LCI/LCA + CDB 120% CDI) por {months} meses e compram um imóvel pronto com poder de barganha à vista na entrada.
-                    </p>
                     <ul className="mt-4 space-y-2 text-xs">
                       <li className="flex justify-between py-1 border-b border-slate-200/70 dark:border-slate-800">
                         <span className="text-slate-500">Entrada (20%):</span>
                         <span className="font-bold">{fmtBRL(sim.downPayment20)}</span>
                       </li>
                       <li className="flex justify-between py-1 border-b border-slate-200/70 dark:border-slate-800">
-                        <span className="text-slate-500">ITBI + Escritura (~5%):</span>
+                        <span className="text-slate-500">ITBI Jaraguá + Cartório (~5%):</span>
                         <span className="font-bold">{fmtBRL(sim.docsItbi5)}</span>
                       </li>
                       <li className="flex justify-between py-1 border-b border-slate-200/70 dark:border-slate-800">
-                        <span className="text-slate-500">Lucro de Juros na Caixa 2:</span>
+                        <span className="text-slate-500">Juros Ganhos na Caixa 2:</span>
                         <span className="font-bold text-emerald-600 dark:text-emerald-400">
                           + {fmtBRL(sim.c2InterestEarned)}
                         </span>
                       </li>
-                      <li className="flex justify-between py-1 border-b border-slate-200/70 dark:border-slate-800">
+                      <li className="flex justify-between py-1">
                         <span className="text-slate-500">Taxa de Evolução de Obra:</span>
                         <span className="font-bold text-emerald-600 dark:text-emerald-400">
                           R$ 0 (Zero)
                         </span>
                       </li>
-                      <li className="flex justify-between py-1">
-                        <span className="text-slate-500">Piso e Marcenaria:</span>
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                          Já instalado no imóvel
-                        </span>
-                      </li>
                     </ul>
                   </div>
                   <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs">
-                    <strong>Veredito Financeiro:</strong> Com a Selic em 13,75% a.a., você ganha{" "}
-                    <strong>+{fmtBRL(sim.c2InterestEarned)}</strong> de juros líquidos em vez de pagar INCC e evolução de obra.
+                    <strong>Vantagem:</strong> Os juros compostos rendem{" "}
+                    <strong>+{fmtBRL(sim.c2InterestEarned)}</strong> livres para ajudar a pagar o apartamento.
                   </div>
                 </div>
 
@@ -1284,33 +1988,24 @@ export default function PlanejadorCasalPage() {
                 <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border-2 border-blue-600 flex flex-col justify-between space-y-4">
                   <div>
                     <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-600 text-white">
-                      Estratégia B • Melhor Opção na Planta
+                      Estratégia B • Melhor Formato na Planta
                     </span>
                     <h4 className="text-base font-bold text-slate-900 dark:text-white mt-2">
-                      Na Planta com Crédito Associativo (Caixa MCMV)
+                      Na Planta c/ Crédito Associativo (Caixa MCMV)
                     </h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      Assina o contrato com a Caixa já na planta. <strong>Congela os 80% financiados contra o INCC</strong>, pagando a entrada parcelada + evolução de obra.
-                    </p>
                     <ul className="mt-4 space-y-2 text-xs">
                       <li className="flex justify-between py-1 border-b border-slate-200/70 dark:border-slate-800">
-                        <span className="text-slate-500">Sinal no Ato (~8% c/ Caixa 2 atual):</span>
-                        <span className="font-bold">{fmtBRL(sim.signal8)}</span>
+                        <span className="text-slate-500">Sinal no Ato ({signalPct}%):</span>
+                        <span className="font-bold">{fmtBRL(sim.signalAmount)}</span>
                       </li>
                       <li className="flex justify-between py-1 border-b border-slate-200/70 dark:border-slate-800">
-                        <span className="text-slate-500">Parcelas Construtora (12% + INCC):</span>
+                        <span className="text-slate-500">Mensais Construtora ({months}x):</span>
                         <span className="font-bold">~{fmtBRL(sim.avgBuilderMonthly)}/mês</span>
                       </li>
                       <li className="flex justify-between py-1 border-b border-slate-200/70 dark:border-slate-800">
-                        <span className="text-slate-500">Juros de Obra (Total em {months}m):</span>
+                        <span className="text-slate-500">Juros Evolução de Obra ({months}m):</span>
                         <span className="font-bold text-amber-600 dark:text-amber-400">
                           - {fmtBRL(sim.totalObraEvolutionFee)}
-                        </span>
-                      </li>
-                      <li className="flex justify-between py-1 border-b border-slate-200/70 dark:border-slate-800">
-                        <span className="text-slate-500">Kit Chaves (Piso + Móveis):</span>
-                        <span className="font-bold text-amber-600 dark:text-amber-400">
-                          {fmtBRL(reformaCost)}
                         </span>
                       </li>
                       <li className="flex justify-between py-1">
@@ -1322,8 +2017,8 @@ export default function PlanejadorCasalPage() {
                     </ul>
                   </div>
                   <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs">
-                    <strong>Como fazer dar certo:</strong> Vocês já têm os{" "}
-                    <strong>{fmtBRL(sim.signal8)}</strong> do Sinal na Caixa 2 hoje! O restante da Caixa 2 fica rendendo em LCI/LCA para pagar o Kit Chaves ({fmtBRL(reformaCost)}) na entrega.
+                    <strong>Como executar em Jaraguá:</strong> Vocês pagam o sinal de{" "}
+                    <strong>{fmtBRL(sim.signalAmount)}</strong> com a Caixa 2 atual e guardam o excedente em LCI/LCA para o Kit Chaves ({fmtBRL(reformaCost)}).
                   </div>
                 </div>
 
@@ -1336,18 +2031,13 @@ export default function PlanejadorCasalPage() {
                     <h4 className="text-base font-bold text-slate-900 dark:text-white mt-2">
                       Na Planta Direto (Financiamento Só nas Chaves)
                     </h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      Não cobra evolução de obra, mas os <strong>80% do saldo devedor sofrem correção mensal pelo INCC</strong> até a entrega do Habite-se!
-                    </p>
                     <ul className="mt-4 space-y-2 text-xs">
                       <li className="flex justify-between py-1 border-b border-slate-200/70 dark:border-slate-800">
-                        <span className="text-slate-500">Saldo Devedor Original (80%):</span>
+                        <span className="text-slate-500">Saldo Financiado Original (80%):</span>
                         <span className="font-bold">{fmtBRL(sim.financed80)}</span>
                       </li>
                       <li className="flex justify-between py-1 border-b border-slate-200/70 dark:border-slate-800">
-                        <span className="text-slate-500">
-                          Saldo Corrigido por INCC ({inccAnnual}% a.a.):
-                        </span>
+                        <span className="text-slate-500">Saldo c/ INCC ({inccAnnual.toFixed(1)}% a.a.):</span>
                         <span className="font-bold text-red-600 dark:text-red-400">
                           {fmtBRL(sim.inccCorrectedDebt80)}
                         </span>
@@ -1358,199 +2048,18 @@ export default function PlanejadorCasalPage() {
                           + {fmtBRL(sim.inccDebtIncrease)}
                         </span>
                       </li>
-                      <li className="flex justify-between py-1 border-b border-slate-200/70 dark:border-slate-800">
-                        <span className="text-slate-500">ITBI + Escritura + Kit Chaves:</span>
+                      <li className="flex justify-between py-1">
+                        <span className="text-slate-500">ITBI + Kit Chaves na Entrega:</span>
                         <span className="font-bold text-amber-600 dark:text-amber-400">
                           {fmtBRL(sim.docsItbi5 + reformaCost)}
-                        </span>
-                      </li>
-                      <li className="flex justify-between py-1">
-                        <span className="text-slate-500">Risco na Entrega das Chaves:</span>
-                        <span className="font-bold text-red-600 dark:text-red-400">
-                          Alto se a renda não subir
                         </span>
                       </li>
                     </ul>
                   </div>
                   <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs">
-                    <strong>Regra de Proteção:</strong> Se o contrato for nesse modelo,{" "}
-                    <strong>não antecipe parcelas sem desconto</strong>. Deixe o dinheiro rendendo 11,5% a.a. líquido na LCI/LCA para abater o saldo nas chaves!
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 4 Golden Rules for Off-Plan */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex gap-3.5">
-                <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                <div className="text-xs space-y-1">
-                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                    1. Arbitragem de Taxas nos Balões/Anuais da Construtora
-                  </h4>
-                  <p className="text-slate-500 dark:text-slate-400">
-                    Corretores costumam sugerir antecipar as parcelas anuais para &ldquo;fugir do INCC&rdquo;. Faça a conta: se o INCC está em {inccAnnual}% a.a. e sua LCI/LCA rende ~11,5% a.a. líquido de IR, <strong>você ganha +6% ao ano deixando o dinheiro aplicado no seu banco</strong> e pagando o boleto apenas no vencimento.
-                  </p>
-                </div>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex gap-3.5">
-                <ShieldCheck className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
-                <div className="text-xs space-y-1">
-                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                    2. Patrimônio de Afetação e Cláusula de 180 Dias
-                  </h4>
-                  <p className="text-slate-500 dark:text-slate-400">
-                    Exija no memorial de incorporação o <strong>Patrimônio de Afetação</strong> (separa a contabilidade do prédio da construtora). Lembre-se também que toda construtora tem por lei até <strong>180 dias corridos de tolerância</strong> além da data prevista de entrega.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ==================== TAB 3: GUIA DIDÁTICO DE INVESTIMENTOS ==================== */}
-        {activeTab === "guia" && (
-          <div className="space-y-6">
-            {/* Cards Explicativos para o Casal */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">
-                    Caixa 1 • Reserva Blindada (R$ 30.000)
-                  </span>
-                  <span className="text-xs font-medium text-slate-400">Liquidez Imediata</span>
-                </div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  1. Tesouro Selic e CDB 100% do CDI (Liquidez Diária)
-                </h3>
-                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                  <strong>Como funciona:</strong> É o investimento mais seguro do país. Seu dinheiro rende todos os dias úteis acompanhando a Taxa Selic (13,75% ao ano). Nunca oscila para baixo e pode ser resgatado no mesmo dia.
-                </p>
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs space-y-1">
-                  <div className="font-bold text-slate-900 dark:text-white">
-                    📌 O que fazer com os seus R$ 60.000 atuais:
-                  </div>
-                  <p className="text-slate-500 dark:text-slate-400">
-                    Deixe <strong>R$ 30.000</strong> quietos no seu CDB 100% CDI atual como Reserva Blindada (Caixa 1). Mantenha os <strong>R$ 10.000 a 120% do CDI</strong> + <strong>R$ 15.000 a 100% do CDI</strong> como base da Caixa 2 (Imóvel), e <strong>R$ 5.000</strong> como semente da Caixa 3.
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-white dark:bg-slate-900 border-2 border-blue-600 rounded-2xl p-5 shadow-sm space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-600 text-white">
-                    Caixa 2 • Aportes do Imóvel ({fmtBRL(sim.c2Monthly)}/mês)
-                  </span>
-                  <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
-                    Zero Imposto de Renda
-                  </span>
-                </div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  2. LCI e LCA Pós-Fixadas (90% a 94% do CDI)
-                </h3>
-                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                  <strong>Como funciona:</strong> Letras de Crédito Imobiliário (LCI) e do Agronegócio (LCA) têm a mesma garantia do FGC dos CDBs (até R$ 250 mil por CPF por banco), mas são <strong>100% isentas de Imposto de Renda para pessoa física</strong>.
-                </p>
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs space-y-1">
-                  <div className="font-bold text-slate-900 dark:text-white">
-                    📌 Como {userName} e {partnerName} compram no app:
-                  </div>
-                  <p className="text-slate-500 dark:text-slate-400">
-                    No menu &ldquo;Renda Fixa&rdquo; do banco/corretora, filtrem por <strong>LCI ou LCA</strong> com taxa acima de <strong>90% do CDI</strong> e vencimento entre <strong>9 e 24 meses</strong> (sempre antes da data em que pretendem assinar o imóvel).
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300">
-                    Caixa 3 • Metade 1 ({fmtBRL(sim.c3Monthly / 2)}/mês)
-                  </span>
-                  <span className="text-xs font-medium text-slate-400">Ganho Real Acima da Inflação</span>
-                </div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  3. Tesouro IPCA+ 2032
-                </h3>
-                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                  <strong>Como funciona:</strong> Garante que o dinheiro de vocês renda toda a inflação oficial (IPCA) + uma taxa fixa de cerca de <strong>7,9% ao ano</strong>. É o motor de multiplicação real de patrimônio do casal.
-                </p>
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs">
-                  <strong>Atenção:</strong> Compre apenas com o dinheiro da <strong>Caixa 3</strong> para segurar até o vencimento, pois se vender antes pode haver oscilação de preço (marcação a mercado).
-                </div>
-              </div>
-
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">
-                    Caixa 3 • Metade 2 ({fmtBRL(sim.c3Monthly / 2)}/mês)
-                  </span>
-                  <span className="text-xs font-medium text-slate-400">Pitada Moderada</span>
-                </div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  4. ETF Global (WRLD11 / IVVB11) ou FIIs
-                </h3>
-                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                  <strong>Como funciona:</strong> Com apenas ~R$ 130 na Bolsa brasileira (B3), vocês compram 1 cota de <strong>WRLD11</strong> (que investe em mais de 9.000 empresas mundiais em dólar) ou <strong>Fundos Imobiliários (FIIs)</strong> que pingam dividendos isentos todo mês.
-                </p>
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs">
-                  <strong>Objetivo Educacional:</strong> Serve para vocês aprenderem juntos a investir em renda variável com pouco dinheiro em risco (~12% do aporte mensal).
-                </div>
-              </div>
-            </div>
-
-            {/* Interactive LCI/LCA vs CDB Converter */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Calculator className="w-4 h-4 text-blue-500" />
-                Calculadora Comparadora: LCI/LCA (Isenta) vs. CDB (Tributado)
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Abriu o aplicativo do banco e ficou na dúvida entre uma LCI/LCA e um CDB? Compare abaixo:
-              </p>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 items-center">
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-slate-500">Taxa da LCI ou LCA:</span>
-                    <span className="font-bold text-blue-600 dark:text-blue-400">
-                      {lciRate}% do CDI
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={82}
-                    max={102}
-                    step={1}
-                    value={lciRate}
-                    onChange={(e) => setLciRate(Number(e.target.value))}
-                    className="w-full cursor-pointer"
-                  />
-                </div>
-
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
-                  <label className="block text-xs text-slate-500 mb-1.5">
-                    Prazo do Título (Tabela Regressiva de IR):
-                  </label>
-                  <select
-                    value={irBracket}
-                    onChange={(e) => setIrBracket(Number(e.target.value))}
-                    className="w-full p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold"
-                  >
-                    <option value={0.2}>De 6 meses a 1 ano (IR de 20,0% no CDB)</option>
-                    <option value={0.175}>De 1 a 2 anos (IR de 17,5% no CDB)</option>
-                    <option value={0.15}>Acima de 2 anos (IR de 15,0% no CDB)</option>
-                  </select>
-                </div>
-
-                <div className="p-4 rounded-xl bg-blue-600 text-white">
-                  <div className="text-xs opacity-90">Para empatar com essa LCI/LCA, o CDB precisa pagar:</div>
-                  <div className="text-lg font-extrabold mt-0.5">
-                    {(lciRate / (1 - irBracket)).toFixed(1).replace(".", ",")}% do CDI Bruto
-                  </div>
-                  <div className="text-xs opacity-90 mt-0.5">
-                    Rentabilidade líquida real no bolso:{" "}
-                    <strong>{((lciRate / 100) * 13.65).toFixed(2).replace(".", ",")}% ao ano</strong>
+                    <strong>Regra de Ouro:</strong> Como sua LCI/LCA rende{" "}
+                    <strong>{((lciRate / 100) * market.cdi).toFixed(1)}% a.a.</strong> contra{" "}
+                    <strong>{inccAnnual.toFixed(1)}% a.a.</strong> do INCC, deixe o dinheiro rendendo no banco e abata o saldo na entrega!
                   </div>
                 </div>
               </div>
@@ -1558,17 +2067,16 @@ export default function PlanejadorCasalPage() {
           </div>
         )}
 
-        {/* ==================== TAB 4: ROTINA MENSAL & CHECKLIST ==================== */}
+        {/* ==================== TAB 5: ROTINA MENSAL & CHECKLIST ==================== */}
         {activeTab === "plano" && (
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-            {/* Monthly Payday Split */}
             <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
               <div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  📅 Roteiro Mensal do Dia do Salário
+                  📅 Roteiro do Dia do Salário ({fmtBRL(sim.coupleMonthly)}/mês)
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  Como distribuir os <strong>{fmtBRL(sim.coupleMonthly)}/mês</strong> em menos de 10 minutos pelo celular:
+                  Divisão mensal exata para o projeto <strong>{activeProperty.name}</strong>:
                 </p>
               </div>
 
@@ -1576,10 +2084,10 @@ export default function PlanejadorCasalPage() {
                 <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
                   <div>
                     <div className="font-bold text-slate-900 dark:text-white">
-                      1. Caixa 1 — Reserva de Emergência
+                      1. Caixa 1 — Reserva Blindada
                     </div>
                     <div className="text-slate-500">
-                      Já completa em {fmtBRL(sim.c1Init)} (rende automática)
+                      Completa em {fmtBRL(sim.c1Init)} (CDB 100% CDI Liquidez Diária)
                     </div>
                   </div>
                   <span className="font-bold text-sm text-emerald-600 dark:text-emerald-400">
@@ -1590,7 +2098,7 @@ export default function PlanejadorCasalPage() {
                 <div className="p-3.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 border-2 border-blue-600 flex items-center justify-between">
                   <div>
                     <div className="font-bold text-slate-900 dark:text-white">
-                      2. Caixa 2 — Imóvel (LCI/LCA 90%+ CDI)
+                      2. Caixa 2 — Imóvel Jaraguá (LCI/LCA {lciRate}% CDI)
                     </div>
                     <div className="text-slate-600 dark:text-slate-300 mt-0.5">
                       {userName}: <strong>{fmtBRL((userMonthly * splitImovelPct) / 100)}</strong> +{" "}
@@ -1607,7 +2115,9 @@ export default function PlanejadorCasalPage() {
                     <div className="font-bold text-slate-900 dark:text-white">
                       3A. Caixa 3 — Tesouro IPCA+ 2032
                     </div>
-                    <div className="text-slate-500">Proteção contra a inflação + juro real</div>
+                    <div className="text-slate-500">
+                      Juro real de IPCA + {market.tesouroIpcaReal.toFixed(2).replace(".", ",")}% a.a.
+                    </div>
                   </div>
                   <span className="font-bold text-sm text-slate-900 dark:text-white">
                     {fmtBRL(sim.c3Monthly / 2)}/mês
@@ -1619,35 +2129,23 @@ export default function PlanejadorCasalPage() {
                     <div className="font-bold text-slate-900 dark:text-white">
                       3B. Caixa 3 — ETF Global (WRLD11) ou FIIs
                     </div>
-                    <div className="text-slate-500">Crescimento moderado de longo prazo</div>
+                    <div className="text-slate-500">Diversificação internacional / dividendos</div>
                   </div>
                   <span className="font-bold text-sm text-slate-900 dark:text-white">
                     {fmtBRL(sim.c3Monthly / 2)}/mês
                   </span>
                 </div>
               </div>
-
-              <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-xs text-emerald-900 dark:text-emerald-200 flex items-center justify-between">
-                <span>Quer mandar esse plano pronto para {partnerName}?</span>
-                <button
-                  onClick={handleShareSimulation}
-                  className="inline-flex items-center gap-1 font-bold underline"
-                >
-                  <span>Copiar Link</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
             </div>
 
-            {/* Interactive Couple Checklist */}
             <div className="lg:col-span-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                    ✅ Checklist Prático do Casal (Salvo no Navegador)
+                    ✅ Checklist do Casal em Jaraguá do Sul
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Marquem cada etapa conforme avançarem no planejamento:
+                    Progresso salvo automaticamente no navegador:
                   </p>
                 </div>
                 <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
